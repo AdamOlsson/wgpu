@@ -22,7 +22,7 @@ pub struct RenderPass {
     render_pipeline: wgpu::RenderPipeline,
     // instances: Vec<Instance>,
     // instance_buffer: wgpu::Buffer,
-    vertex_buffer: wgpu::Buffer,
+    pub vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     num_indices: u32,
 }
@@ -149,7 +149,7 @@ impl RenderPass {
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Circle Vertex Buffer"),
                 contents: bytemuck::cast_slice(&circle.vertices),
-                usage: wgpu::BufferUsages::VERTEX,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             }
         );
         let index_buffer = device.create_buffer_init(
@@ -209,7 +209,7 @@ impl Pass for RenderPass {
                 load: wgpu::LoadOp::Clear(wgpu::Color {
                     r: 0.0,
                     g: 0.0,
-                    b: 1.0,
+                    b: 0.0,
                     a: 1.0,
                 }),
                 store: wgpu::StoreOp::Store,

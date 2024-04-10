@@ -34,6 +34,7 @@ async fn run() {
     event_loop.run(
         move | event, elwt | match event {
             Event::UserEvent(..) => {
+                state.update();
                 state.render().unwrap();
             }
             Event::WindowEvent {
@@ -53,7 +54,7 @@ async fn run() {
                         },
                     ..
                 } => {
-                    println!("Goodbye see you!");
+                    println!("Goodbye, see you!");
                     elwt.exit();
                 }
 

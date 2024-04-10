@@ -1,6 +1,5 @@
 use wgpu::{Device, Queue, Surface};
 
-pub mod pipeline_builder;
 pub mod vertex;
 pub mod render_pass;
 pub mod instance;
