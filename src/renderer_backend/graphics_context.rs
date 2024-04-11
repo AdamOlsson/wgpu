@@ -1,3 +1,5 @@
+use wgpu::util::DeviceExt;
+
 
 pub struct GraphicsContext<'a> {
     pub device: wgpu::Device,
@@ -50,5 +52,15 @@ impl<'a> GraphicsContext<'a> {
         surface.configure(&device, &config);
 
         Self { device, queue, surface, config }
+    }
+
+    pub fn create_buffer(&mut self, label: &str, contents: &[u8], usage: wgpu::BufferUsages) -> wgpu::Buffer {
+        self.device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some(label),
+                contents: contents,
+                usage: usage,
+            }
+        )
     }
 }
