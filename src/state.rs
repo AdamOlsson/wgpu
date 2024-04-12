@@ -1,6 +1,7 @@
+use rand::Rng;
 use winit::window::Window;
 
-use crate::{renderer_backend::{graphics_context::GraphicsContext, instance::Instance, render_pass::RenderPass, vertex, Pass}, shapes::circle::Circle};
+use crate::{renderer_backend::{graphics_context::GraphicsContext, instance::Instance, render_pass::RenderPass, vertex, Pass}, shapes::circle::{self, Circle}};
 
 
 pub struct State<'a> {
@@ -10,8 +11,7 @@ pub struct State<'a> {
     size: winit::dpi::PhysicalSize<u32>,
 
     // TODO: Move to new struct
-    circle: Circle,
-    velocity: [f32; 3],
+    pub circles: Vec<Circle>,
 
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
@@ -29,30 +29,48 @@ impl <'a> State <'a> {
 
         let pass = RenderPass::new(&ctx.device);
 
-        let circle = Circle::new([0.0, 0.0, 0.0], 0.1);
+        let base_circle = Circle::new([0.0, 0.0, 0.0], 0.1);
+
+        let mut circles = vec![
+            Circle::new([0.5, 0.0, 0.0], 0.1),
+            Circle::new([-0.5, 0.0, 0.0], 0.1),
+            Circle::new([-0.5, 0.5, 0.0], 0.1),
+            Circle::new([0.5, 0.5, 0.0], 0.1),
+        ];
+
+        let mut rng = rand::thread_rng();
+        let max = 0.01;
+        let min = -0.01;
+        for c in circles.iter_mut() {
+            c.velocity = [rng.gen_range(min..=max), rng.gen_range(min..=max), 0.0];
+        }
+    
         let vertex_buffer = ctx.create_buffer(
-            "Circle vertex buffer", bytemuck::cast_slice(&circle.vertices),
+            "Circle vertex buffer", bytemuck::cast_slice(&base_circle.vertices),
             wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST);
 
         let index_buffer = ctx.create_buffer(
-                "Circle index buffer", bytemuck::cast_slice(&circle.indices),
+                "Circle index buffer", bytemuck::cast_slice(&base_circle.indices),
                 wgpu::BufferUsages::INDEX);
         
-        let instances = vec![
-            Instance {position: cgmath::Vector3::new(-0.5, 0.0, 0.0),},
-            Instance {position: cgmath::Vector3::new(0.5, 0.0, 0.0),},
-        ];
+        let instances = circles.iter().map(
+            |circle| Instance {
+                position: cgmath::Vector3::new(circle.position[0], circle.position[1], circle.position[2]),
+            }).collect::<Vec<_>>();
+
+
         let instance_buffer = ctx.create_buffer(
             "Circle instance buffer", bytemuck::cast_slice(
                 &instances.iter().map(Instance::to_raw).collect::<Vec<_>>()),
-                wgpu::BufferUsages::VERTEX);
+                wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST);
 
-        let velocity = [0.008, 0.01, 0.0];
-        let num_indices = circle.num_indices;
+        let num_indices = base_circle.num_indices;
         let num_instances = instances.len() as u32;
 
-        Self { window, ctx, pass, size, circle, velocity, instances, instance_buffer,
-                vertex_buffer, index_buffer, num_indices, num_instances}
+        Self { window, ctx, pass, size, instances, instance_buffer,
+                vertex_buffer, index_buffer, num_indices, num_instances,
+                 circles
+                }
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
@@ -63,19 +81,15 @@ impl <'a> State <'a> {
     }
 
     pub fn update(&mut self) {
-        // if self.circle.center[0] + self.circle.radius + self.velocity[0] >= 1.0 ||
-        //         self.circle.center[0] - self.circle.radius + self.velocity[0] <= -1.0 {
-        //     self.velocity[0] *= -1.0;
-        // }
-        // if self.circle.center[1] + self.circle.radius + self.velocity[1] >= 1.0 ||
-        //         self.circle.center[1] - self.circle.radius + self.velocity[1] <= -1.0 {
-        //     self.velocity[1] *= -1.0;
-        // }
+        for circle in self.circles.iter_mut() {
+            circle.update();
+        }
 
-        // self.circle.translate(self.velocity);
-
-        // self.ctx.queue.write_buffer(&self.pass.vertex_buffer,
-        //      0, bytemuck::cast_slice(&self.circle.vertices));
+        let positions = self.circles.iter().map(|c| c.position).collect::<Vec<_>>();
+        
+        self.ctx.queue.write_buffer(&self.instance_buffer, 
+             0, bytemuck::cast_slice(
+                &positions));
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {

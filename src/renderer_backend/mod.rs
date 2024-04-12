@@ -1,5 +1,3 @@
-use core::num;
-
 use wgpu::{Device, Queue, Surface};
 
 pub mod vertex;

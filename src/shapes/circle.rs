@@ -2,32 +2,49 @@ use crate::renderer_backend::vertex::Vertex;
 
 
 pub struct Circle {
-    pub center: [f32;3],
+    pub position: [f32;3],
     pub radius: f32,
     pub indices: Vec<u16>,
     pub num_indices: u32,
     pub vertices: Vec<Vertex>,
+
+    pub velocity: [f32;3],
 }
 
 impl Circle {
-    pub fn new(center: [f32;3], radius: f32) -> Self {
+    pub fn new(position: [f32;3], radius: f32) -> Self {
 
-        let vertices = Self::compute_vertices(center, radius);
+        let vertices = Self::compute_vertices(position, radius);
         let indices = Self::compute_indices();
 
         let num_indices = (359)*3;
-        Self { center, radius, indices, num_indices, vertices}
+        let velocity = [0.0, 0.0, 0.0];
+
+        Self { position, radius, indices, num_indices, vertices, velocity}
     }
 
     pub fn translate(&mut self, translation: [f32;3]) {
-        self.center[0] += translation[0];
-        self.center[1] += translation[1];
-        self.center[2] += translation[2];
+        self.position[0] += translation[0];
+        self.position[1] += translation[1];
+        self.position[2] += translation[2];
         for vertex in self.vertices.iter_mut() {
             vertex.position[0] += translation[0];
             vertex.position[1] += translation[1];
             vertex.position[2] += translation[2];
         }
+    }
+
+    pub fn update(&mut self) {
+        // TODO: These checks should probably not be here
+        if self.position[0] + self.radius + self.velocity[0] >= 1.0 ||
+            self.position[0] - self.radius + self.velocity[0] <= -1.0 {
+                self.velocity[0] *= -1.0;
+        }
+        if self.position[1] + self.radius + self.velocity[1] >= 1.0 ||
+                self.position[1] - self.radius + self.velocity[1] <= -1.0 {
+            self.velocity[1] *= -1.0;
+        }
+        self.translate(self.velocity);
     }
 
     fn compute_vertices(center: [f32;3], radius: f32) -> Vec<Vertex> {
