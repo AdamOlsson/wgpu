@@ -1,7 +1,7 @@
 use rand::Rng;
 use winit::window::Window;
 
-use crate::{renderer_backend::{graphics_context::GraphicsContext, instance::Instance, render_pass::RenderPass, vertex, Pass}, shapes::circle::{self, Circle}};
+use crate::{collision_simulation::CollisionSimulation, renderer_backend::{graphics_context::GraphicsContext, instance::Instance, render_pass::RenderPass, vertex, Pass}, shapes::circle::{self, Circle}};
 
 
 pub struct State<'a> {
@@ -10,15 +10,10 @@ pub struct State<'a> {
     pass: RenderPass,
     size: winit::dpi::PhysicalSize<u32>,
 
-    // TODO: Move to new struct
-    pub circles: Vec<Circle>,
-
-    instances: Vec<Instance>,
+    collision_simulation: CollisionSimulation,
     instance_buffer: wgpu::Buffer,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
-    num_indices: u32,
-    num_instances: u32,
 }
 
 impl <'a> State <'a> {
@@ -28,48 +23,31 @@ impl <'a> State <'a> {
         let mut ctx = GraphicsContext::new(&window).await;
 
         let pass = RenderPass::new(&ctx.device);
-
-        let base_circle = Circle::new([0.0, 0.0, 0.0], 0.1);
-
-        let mut circles = vec![
-            Circle::new([0.5, 0.0, 0.0], 0.1),
-            Circle::new([-0.5, 0.0, 0.0], 0.1),
-            Circle::new([-0.5, 0.5, 0.0], 0.1),
-            Circle::new([0.5, 0.5, 0.0], 0.1),
-        ];
-
-        let mut rng = rand::thread_rng();
-        let max = 0.01;
-        let min = -0.01;
-        for c in circles.iter_mut() {
-            c.velocity = [rng.gen_range(min..=max), rng.gen_range(min..=max), 0.0];
-        }
+        
+        let collision_simulation = CollisionSimulation::new();
     
         let vertex_buffer = ctx.create_buffer(
-            "Circle vertex buffer", bytemuck::cast_slice(&base_circle.vertices),
+            "Circle vertex buffer", bytemuck::cast_slice(&collision_simulation.vertices),
             wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST);
 
         let index_buffer = ctx.create_buffer(
-                "Circle index buffer", bytemuck::cast_slice(&base_circle.indices),
+                "Circle index buffer", bytemuck::cast_slice(&collision_simulation.indices),
                 wgpu::BufferUsages::INDEX);
-        
-        let instances = circles.iter().map(
-            |circle| Instance {
-                position: cgmath::Vector3::new(circle.position[0], circle.position[1], circle.position[2]),
-            }).collect::<Vec<_>>();
 
+        let instances = collision_simulation.positions.iter().map(
+            |position| Instance {
+                position: cgmath::Vector3::new(position[0], position[1], position[2]),
+            }).collect::<Vec<_>>();
 
         let instance_buffer = ctx.create_buffer(
             "Circle instance buffer", bytemuck::cast_slice(
                 &instances.iter().map(Instance::to_raw).collect::<Vec<_>>()),
                 wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST);
 
-        let num_indices = base_circle.num_indices;
-        let num_instances = instances.len() as u32;
 
-        Self { window, ctx, pass, size, instances, instance_buffer,
-                vertex_buffer, index_buffer, num_indices, num_instances,
-                 circles
+        Self { window, ctx, pass, size, instance_buffer,
+                vertex_buffer, index_buffer, 
+                collision_simulation
                 }
     }
 
@@ -81,11 +59,13 @@ impl <'a> State <'a> {
     }
 
     pub fn update(&mut self) {
-        for circle in self.circles.iter_mut() {
-            circle.update();
-        }
+        self.collision_simulation.update();
 
-        let positions = self.circles.iter().map(|c| c.position).collect::<Vec<_>>();
+
+        let mut positions = Vec::new();
+        for i in 0..self.collision_simulation.num_instances as usize {
+            positions.push(self.collision_simulation.positions[i]);
+        }
         
         self.ctx.queue.write_buffer(&self.instance_buffer, 
              0, bytemuck::cast_slice(
@@ -95,7 +75,9 @@ impl <'a> State <'a> {
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         self.pass.draw(&self.ctx.surface, &self.ctx.device, &self.ctx.queue,
             &self.vertex_buffer, &self.index_buffer, &self.instance_buffer,
-            self.num_indices, self.num_instances).unwrap();
+            self.collision_simulation.num_indices,
+            self.collision_simulation.num_instances
+        ).unwrap();
         return Ok(());
     }
 }

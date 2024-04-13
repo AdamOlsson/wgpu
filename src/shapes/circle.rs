@@ -47,7 +47,7 @@ impl Circle {
         self.translate(self.velocity);
     }
 
-    fn compute_vertices(center: [f32;3], radius: f32) -> Vec<Vertex> {
+    pub fn compute_vertices(center: [f32;3], radius: f32) -> Vec<Vertex> {
         let x = center[0];
         let y = center[1];
         let mut vertices = Vec::new();
@@ -62,7 +62,7 @@ impl Circle {
         return vertices;
     }
 
-    fn compute_indices() -> Vec<u16> {
+    pub fn compute_indices() -> Vec<u16> {
         let mut indices = Vec::new();
         for i in 1..359 {
             indices.push(i as u16);
