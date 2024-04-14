@@ -6,8 +6,7 @@ const MAX_INSTANCES: usize = 10000;
 
 pub struct CollisionSimulation {
     pub positions: [[f32;3]; MAX_INSTANCES],
-    // velocities: [[f32;3]; MAX_INSTANCES],
-
+    pub colors: [[f32;3]; MAX_INSTANCES],
     velocity_directons: [f32; MAX_INSTANCES],
     velocity_magnitudes: [f32; MAX_INSTANCES],
 
@@ -25,7 +24,8 @@ impl CollisionSimulation {
         let num_instances: u32 = 100;
                 
         let positions = CollisionSimulation::compute_initial_positions(num_instances, radius);
-        
+        let colors = CollisionSimulation::genrate_random_colors();
+
         let mut rng = rand::thread_rng();
     
         let mut velocity_magnitudes: [f32; MAX_INSTANCES] = [0.; MAX_INSTANCES];
@@ -39,7 +39,18 @@ impl CollisionSimulation {
         let indices = Circle::compute_indices();
         let num_indices = (359)*3;
 
-        Self { positions, velocity_magnitudes, velocity_directons, num_instances, radius, indices, num_indices, vertices }
+        Self { positions, colors, velocity_magnitudes, velocity_directons, num_instances, radius, indices, num_indices, vertices }
+    }
+
+    fn genrate_random_colors() -> [[f32;3]; MAX_INSTANCES] {
+        let mut colors = [[0.0, 0.0, 0.0]; MAX_INSTANCES];
+        let mut rng = rand::thread_rng();
+        let min = 0.2;
+        let max = 1.0;
+        for i in 0..MAX_INSTANCES {
+            colors[i] = [rng.gen_range(min..max), rng.gen_range(min..max), rng.gen_range(min..max)];
+        }
+        colors
     }
 
     fn collision_check(p1: [f32;3], p2: [f32;3], r1: f32, r2: f32) -> bool {

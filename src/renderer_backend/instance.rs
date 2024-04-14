@@ -1,11 +1,12 @@
 pub struct Instance {
     pub position: cgmath::Vector3<f32>,
+    pub color: cgmath::Vector3<f32>,
 }
 
 impl Instance {
     pub fn to_raw(&self) -> InstanceRaw {
         InstanceRaw {
-            position: self.position.into(),
+            model: [self.position.into(), self.color.into()]
         }
     }
 }
@@ -13,7 +14,7 @@ impl Instance {
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct InstanceRaw {
-    position: [f32; 3],
+    model: [[f32; 3];2],
 }
 
 impl InstanceRaw {
@@ -26,6 +27,11 @@ impl InstanceRaw {
                 wgpu::VertexAttribute {
                     offset: 0,
                     shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 3,
                     format: wgpu::VertexFormat::Float32x3,
                 },
             ],

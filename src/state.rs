@@ -1,4 +1,3 @@
-use rand::Rng;
 use winit::window::Window;
 
 use crate::{collision_simulation::CollisionSimulation, renderer_backend::{graphics_context::GraphicsContext, instance::Instance, render_pass::RenderPass, vertex, Pass}, shapes::circle::{self, Circle}};
@@ -33,10 +32,11 @@ impl <'a> State <'a> {
         let index_buffer = ctx.create_buffer(
                 "Circle index buffer", bytemuck::cast_slice(&collision_simulation.indices),
                 wgpu::BufferUsages::INDEX);
-
-        let instances = collision_simulation.positions.iter().map(
-            |position| Instance {
-                position: cgmath::Vector3::new(position[0], position[1], position[2]),
+        
+        let instances = (0..collision_simulation.num_instances as usize).map(
+            |i| Instance {
+                position: collision_simulation.positions[i].into(),
+                color: collision_simulation.colors[i].into(),
             }).collect::<Vec<_>>();
 
         let instance_buffer = ctx.create_buffer(
@@ -61,15 +61,17 @@ impl <'a> State <'a> {
     pub fn update(&mut self) {
         self.collision_simulation.update();
 
-
-        let mut positions = Vec::new();
+        let mut instance_data: Vec<[[f32;3];2]> = Vec::new();
         for i in 0..self.collision_simulation.num_instances as usize {
-            positions.push(self.collision_simulation.positions[i]);
+            instance_data.push([self.collision_simulation.positions[i], self.collision_simulation.colors[i]]);
         }
         
+        // To prevent writing the static colors every run, we probably can use a global buffer and write 
+        // the colors to it once (maybe and then copy it to the instance buffer every frame.)
         self.ctx.queue.write_buffer(&self.instance_buffer, 
              0, bytemuck::cast_slice(
-                &positions));
+                &instance_data));
+        
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
