@@ -63,7 +63,7 @@ impl <'a> State <'a> {
 
         let mut instance_data: Vec<[[f32;3];2]> = Vec::new();
         for i in 0..self.collision_simulation.num_instances as usize {
-            instance_data.push([self.collision_simulation.positions[i], self.collision_simulation.colors[i]]);
+            instance_data.push([self.collision_simulation.positions[i].into(), self.collision_simulation.colors[i].into()]);
         }
         
         // To prevent writing the static colors every run, we probably can use a global buffer and write 
