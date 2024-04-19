@@ -5,6 +5,16 @@ use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
 
 const MAX_INSTANCES: usize = 10000;
 
+#[derive(PartialEq)]
+enum Boundary {
+    Top,
+    Bottom,
+    Left,
+    Right,
+    Horizontal,
+    Vertical,
+}
+
 pub struct CollisionSimulation {
     pub positions: [Vector3<f32>; MAX_INSTANCES],
     pub colors: [Vector3<f32>; MAX_INSTANCES],
@@ -25,16 +35,16 @@ const BOTTOM_RIGHT: Vector3<f32> = Vector3::new(1.0, -1.0, 0.0);
 
 impl CollisionSimulation {
     pub fn new() -> Self{
-        let radius = 0.07;
-        let num_instances: u32 = 5;
+        let radius = 0.01;
+        let num_instances: u32 = 1000;
                 
         let positions = CollisionSimulation::generate_initial_positions(num_instances, radius);
-        // let mut positions = [[0.0, 0.0, 0.0]; MAX_INSTANCES];
-        // positions[0] = [-0.9, -0.9, 0.0];
+        // let mut positions = [Vector3::new(0.0, 0.0, 0.0); MAX_INSTANCES];
+        // positions[0] = Vector3::new(0.8, 0.8, 0.0);
         let colors = CollisionSimulation::genrate_random_colors();
         let velocities = CollisionSimulation::generate_random_velocities();
-        // let mut velocities = [[0.0, 0.0, 0.0]; MAX_INSTANCES];
-        // velocities[0] = [0.0, -0.001, 0.0];
+        // let mut velocities = [Vector3::new(0.0, 0.0, 0.0); MAX_INSTANCES];
+        // velocities[0] = Vector3::new(0.001, 0.0, 0.0);
 
         let vertices = Circle::compute_vertices([0.0, 0.0, 0.0], radius);
         let indices = Circle::compute_indices();
@@ -85,20 +95,24 @@ impl CollisionSimulation {
         // Check for collision with boundaries
         for i in 0..self.num_instances as usize {
             let new_pos = self.positions[i] + self.velocities[i];
-            // TODO: Create a nice "bounce" why computing the new position after a collision with border.
             match CollisionSimulation::vertical_boundary_collision(self.positions[i], new_pos, self.velocities[i], self.radius) {
                 None => (), // No collision
                 Some(collision_point) => {
-                    // TODO: Make nice bounce
-                    self.velocities[i][0] = -self.velocities[i][0];
+                    let position_after_collision = CollisionSimulation::boundary_collision_response(
+                        self.positions[i], new_pos, collision_point, &mut self.velocities[i], Boundary::Vertical);
+                    self.positions[i] = position_after_collision;
+                    continue;
                 },
             }
 
             match CollisionSimulation::horizontal_boundary_collision(self.positions[i], new_pos, self.velocities[i], self.radius) {
                 None => (), // No collision
                 Some(collision_point) => {
-                    // TODO: Make nice bounce
-                    self.velocities[i][1] = -self.velocities[i][1];
+                    let position_after_collision = CollisionSimulation::boundary_collision_response(
+                        self.positions[i], new_pos, collision_point, &mut self.velocities[i], Boundary::Horizontal);
+                    self.positions[i] = position_after_collision;
+                    continue;
+
                 },
             }
 
@@ -107,6 +121,32 @@ impl CollisionSimulation {
         }
     }
     
+    /// Computes the new position of the circle after a collision with a boundary.
+    ///
+    /// Note: This function will change the velocity of the circle.
+    /// 
+    /// Returns the new position of the circle after the collision.
+    fn boundary_collision_response(
+            curr_pos: Vector3<f32>, new_pos: Vector3<f32>,
+            collision_point: Vector3<f32>, velocity: &mut Vector3<f32>, boundary: Boundary) -> Vector3<f32> {
+        let travel_distance = curr_pos.distance2(new_pos);
+        let collision_distance = curr_pos.distance2(collision_point);
+        let travel_distance_after_collision = travel_distance - collision_distance;
+        let travel_distance_after_collision_percent = travel_distance_after_collision / travel_distance;
+        
+        if boundary == Boundary::Horizontal {
+            velocity[1] = -velocity[1];
+        } else if boundary == Boundary::Vertical {
+            velocity[0] = -velocity[0];
+        } else {
+            panic!("Invalid boundary type. Valid types are Horizontal and Vertical");
+        }
+        
+        let position_after_collision = collision_point + (*velocity)*travel_distance_after_collision_percent;
+        position_after_collision
+
+    }
+
     fn vertical_boundary_collision(
             curr_pos: Vector3<f32>, new_pos: Vector3<f32>,
             velocity: Vector3<f32>, radius: f32) -> Option<Vector3<f32>> {
@@ -162,6 +202,12 @@ impl CollisionSimulation {
         }
     }
 
+    /// Computes the point where the circle will collide with the boundary.
+    /// 
+    /// The function assumes that the circle will collide with the boundary in the next
+    /// timestep. It computes the collision point with respect to the circle's radius.
+    /// 
+    /// Returns the point where the circle will collide with the boundary.
     fn compute_collision_point(
                 boundary_start: Vector3<f32>, boundary_stop: Vector3<f32>,
                 curr_position: Vector3<f32>, velocity_vec: Vector3<f32>,
@@ -181,13 +227,16 @@ impl CollisionSimulation {
         Vector3::new(p2_x, p2_y, 0.0)
     }
 
+    /// Evaluates wether a circle is about to collide with a boundary. It does so by 
+    /// checking if the line of the velocity direction intersects with the boundary.
+    /// If the lines intersect, there is a collision if:
+    /// - The distance between the collision point and the new position is less than the radius
+    /// - The distance between the closest point on the boundary and the new position is less than the radius
+    /// 
+    /// Returns the point where the velocity line intersects with the boundary if there is a collision.
     fn boundary_collision(boundary_start: Vector3<f32>, boundary_stop: Vector3<f32>,
             curr_position: Vector3<f32>, new_position: Vector3<f32>,
             velocity: Vector3<f32>, radius: f32) -> Option<Vector3<f32>> {
-        // TODO: Optimize by changing the function header to take a point instead of an index
-        // let vel = self.velocities[i];
-        // let pos = self.positions[i];
-        // let new_pos = pos + vel;
         match CollisionSimulation::line_line_intersect(boundary_start.into(), boundary_stop.into(), curr_position.into(), new_position.into()) {
             None => return None, // No collision
             Some(collision_point) => {
@@ -210,6 +259,9 @@ impl CollisionSimulation {
         }
     }
 
+    /// Computes the intersection point of two lines.
+    /// 
+    /// Returns the intersection point if the lines intersect, otherwise None.
     fn line_line_intersect(A: [f32;3], B: [f32;3], C: [f32;3], D: [f32;3]) -> Option<Vector3<f32>>{
         let a1 = B[1] - A[1];
         let b1 = A[0] - B[0];
@@ -229,6 +281,9 @@ impl CollisionSimulation {
         Some(Vector3::new(x, y, 0.0))
     }
 
+    /// Computes the closest point on a line to a given point.
+    /// 
+    /// Returns the closest point on the line.
     fn closest_point_on_line(line_start: Vector3<f32>, line_end: Vector3<f32>, p: Vector3<f32>) -> Vector3<f32> {
         // y = ax + b
         let ab = line_end - line_start;
