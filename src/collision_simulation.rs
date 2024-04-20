@@ -1,4 +1,5 @@
 use cgmath::{InnerSpace, MetricSpace, Vector3};
+
 use rand::Rng;
 
 use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
@@ -55,46 +56,21 @@ impl CollisionSimulation {
 
 
 
-    fn collision_check(p1: [f32;3], p2: [f32;3], r1: f32, r2: f32) -> bool {
-        let distance = f32::sqrt((p1[0] - p2[0]).powi(2) + (p1[1] - p2[1]).powi(2));
-        distance <= r1 + r2
-    }
-
-    fn collosion_resolution(&mut self, i1: usize, i2: usize) {
-        let p1 = self.positions[i1];
-        let p2 = self.positions[i2];
-
-        let distance = p2-p1;
-        let distance_mag = f32::sqrt(distance[0].powi(2) + distance[1].powi(2));
-        let distance_unit = [distance[0] / distance_mag, distance[1] / distance_mag];
-        let plane_norm = [-distance_unit[0], -distance_unit[1]];
-        
-        let direction_vec = self.velocities[i1];
-        let dot_product = direction_vec[0] * plane_norm[0] + direction_vec[1] * plane_norm[1];
-        let new_direction_vec = Vector3::new(
-            direction_vec[0] - 2.0 * dot_product * plane_norm[0],
-            direction_vec[1] - 2.0 * dot_product * plane_norm[1],
-            0.0,
-        );
-
-        // TODO: Make this more sophisticated and calulate the new position with a "bounce"
-        self.velocities[i1] = new_direction_vec;
-    }
-
     pub fn update(&mut self) {
-        // Check for collisions with other cirlces
-        // for i in 0..self.num_instances as usize {
-        //     for j in 0..self.num_instances as usize {
-        //         if i != j && CollisionSimulation::collision_check(self.positions[i], self.positions[j], self.radius, self.radius) {
-        //             // self.collosion_resolution(i, j);
-        //         }
-        //     }
-        // }
 
-
-        // Check for collision with boundaries
         for i in 0..self.num_instances as usize {
             let new_pos = self.positions[i] + self.velocities[i];
+            // TODO: How should I handle a situation where the circle has two collisions in one timestep?
+            
+            for j in 0..self.num_instances as usize {
+                if i == j {
+                    continue;
+                }
+
+
+            }
+
+
             match CollisionSimulation::vertical_boundary_collision(self.positions[i], new_pos, self.velocities[i], self.radius) {
                 None => (), // No collision
                 Some(collision_point) => {
@@ -121,6 +97,57 @@ impl CollisionSimulation {
         }
     }
     
+    /// Computes the time of collision between two circles.
+    /// 
+    /// Returns a value between 0.0 and 1.0 representing the fraction of a timestep
+    /// until the collision returns. If there is no collision, None is returned.
+    fn continous_circle_circle_collision_detection(
+            circle_1_old_pos: Vector3<f32>, circle_1_new_pos: Vector3<f32>,
+            radius_circle_1:f32, circle_2_old_pos: Vector3<f32>,
+            circle_2_new_pos: Vector3<f32>, radius_circle_2: f32) -> Option<f32> {
+        let h_old_pos = circle_1_old_pos;
+        let h_new_pos = circle_1_new_pos;
+        let g_old_pos = circle_2_old_pos;
+        let g_new_pos = circle_2_new_pos;
+
+        let delta_h = h_new_pos - h_old_pos;
+        let delta_g = g_new_pos - g_old_pos;
+        let a = delta_h.dot(delta_h).abs() + delta_g.dot(delta_g).abs() + 2.0 * delta_h.dot(delta_g).abs();
+
+        if a == 0.0 {
+            // The circles are not moving
+            return None;
+        }
+
+        let b = 2.0 * (delta_h.dot(h_old_pos) + delta_g.dot(g_old_pos) - delta_h.dot(g_old_pos) - delta_g.dot(h_old_pos));
+        let c = h_old_pos.dot(h_old_pos) + g_old_pos.dot(g_old_pos) - 2.0 * h_old_pos.dot(g_old_pos) - (radius_circle_1 + radius_circle_2).powi(2);
+
+        let discriminant = (b.powi(2) - 4.0 * a * c).abs();
+        if discriminant < 0.0 {
+            // There exists no solition to the equation
+            return None;
+        }
+        let t1 = (-b + f32::sqrt(discriminant)) / (2.0 * a);
+        let t2 = (-b - f32::sqrt(discriminant)) / (2.0 * a);
+
+        if t1 < 0.0 && t2 < 0.0 {
+            // The collision happened in the past
+            return None;
+        }
+
+        if t1 >= 0.0 && t2 >= 0.0 {
+            // The collision will happen in the future, return the smallest value
+            // as the smallar is the time of collision and the larger when the circles
+            // would exit each other if the would pass through.
+            return Some(t1.min(t2));
+        }
+
+        // Finally, either t1 or t2 is positive. I am unsure what to return in this case
+        // as this means that we already are in a collision. For now I return the negative
+        // value to signal that we are in a collision.
+        return Some(t1.min(t2));
+    }
+
     /// Computes the new position of the circle after a collision with a boundary.
     ///
     /// Note: This function will change the velocity of the circle.
@@ -153,12 +180,10 @@ impl CollisionSimulation {
 
         let res_left =
         CollisionSimulation::boundary_collision(BOTTOM_LEFT, TOP_LEFT,
-            curr_pos, new_pos,
-            velocity, radius); // Left boundary
+            curr_pos, new_pos, radius); // Left boundary
         match res_left {
             None => match CollisionSimulation::boundary_collision(TOP_RIGHT, BOTTOM_RIGHT,
-                curr_pos, new_pos,
-                    velocity, radius) { // Right boundary
+                curr_pos, new_pos, radius) { // Right boundary
                 None => return None, // No collision
                 Some(line_collision_point) =>
                     Some(CollisionSimulation::compute_collision_point(
@@ -180,12 +205,10 @@ impl CollisionSimulation {
 
         let res_bottom =
             CollisionSimulation::boundary_collision( BOTTOM_LEFT, BOTTOM_RIGHT,
-                curr_pos, new_pos,
-                velocity, radius);
+                curr_pos, new_pos, radius);
         match res_bottom {
             None => match CollisionSimulation::boundary_collision(TOP_LEFT, TOP_RIGHT,
-                    curr_pos, new_pos,
-                    velocity, radius) {
+                    curr_pos, new_pos, radius) {
                 None => return None, // No collision
                 Some(line_collision_point) =>
                 Some(CollisionSimulation::compute_collision_point(
@@ -235,8 +258,7 @@ impl CollisionSimulation {
     /// 
     /// Returns the point where the velocity line intersects with the boundary if there is a collision.
     fn boundary_collision(boundary_start: Vector3<f32>, boundary_stop: Vector3<f32>,
-            curr_position: Vector3<f32>, new_position: Vector3<f32>,
-            velocity: Vector3<f32>, radius: f32) -> Option<Vector3<f32>> {
+            curr_position: Vector3<f32>, new_position: Vector3<f32>, radius: f32) -> Option<Vector3<f32>> {
         match CollisionSimulation::line_line_intersect(boundary_start.into(), boundary_stop.into(), curr_position.into(), new_position.into()) {
             None => return None, // No collision
             Some(collision_point) => {
@@ -417,6 +439,112 @@ mod tests {
         let expected_result = Vector3::new(0.0, 0.0, 0.0);
         let res = super::CollisionSimulation::closest_point_on_line(line_start, line_end, p);
         assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res);
+    }
+
+    #[test]
+    fn test_continious_circle_collision_no_collision() {
+        let radius = 0.1;
+        let circle_1_old_pos = Vector3::new(0.2, 0.0, 0.0);
+        let circle_1_new_pos = Vector3::new(0.3, 0.0, 0.0);
+        let circle_2_old_pos = Vector3::new(-0.2, 0.0, 0.0);
+        let circle_2_new_pos = Vector3::new(-0.3, 0.0, 0.0);
+        let expected_result: Option<f32> = None;
+        let res = super::CollisionSimulation::continous_circle_circle_collision_detection(
+            circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
+        assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res);
+    }
+
+    #[test]
+    fn test_continious_circle_collision_static_dynamic_circles1() {
+        let radius = 0.1;
+        let circle_1_old_pos = Vector3::new(0.0, 0.0, 0.0);
+        let circle_1_new_pos = Vector3::new(0.0, 0.0, 0.0);
+        let circle_2_old_pos = Vector3::new(0.25, 0.0, 0.0);
+        let circle_2_new_pos = Vector3::new(0.15, 0.0, 0.0);
+        let expected_result = 0.5;
+        let epsilon: f32 = 0.0001;
+        let res = super::CollisionSimulation::continous_circle_circle_collision_detection(
+            circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
+        assert_ne!(res, None, "Expected collision but got None");
+        let diff = res.unwrap() - expected_result;
+        assert!(diff.abs() < epsilon, "Expected {:?} but got {:?}", expected_result, res.unwrap());
+    }
+
+    #[test]
+    fn test_continious_circle_collision_static_dynamic_circles2() {
+        let radius = 0.1;
+        let circle_1_old_pos = Vector3::new(0.25, 0.0, 0.0);
+        let circle_1_new_pos = Vector3::new(0.15, 0.0, 0.0);
+        let circle_2_old_pos = Vector3::new(0.0, 0.0, 0.0);
+        let circle_2_new_pos = Vector3::new(0.0, 0.0, 0.0);
+        let expected_result = 0.5;
+        let epsilon: f32 = 0.0001;
+        let res = super::CollisionSimulation::continous_circle_circle_collision_detection(
+            circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
+        assert_ne!(res, None, "Expected collision but got None");
+        let diff = res.unwrap() - expected_result;
+        assert!(diff.abs() < epsilon, "Expected {:?} but got {:?}", expected_result, res.unwrap());
+    }
+
+    #[test]
+    fn test_continious_circle_collision_static_static_circles_no_collision() {
+        let radius = 0.1;
+        let circle_1_old_pos = Vector3::new(-0.15, 0.0, 0.0);
+        let circle_1_new_pos = Vector3::new(-0.15, 0.0, 0.0);
+        let circle_2_old_pos = Vector3::new(0.15, 0.0, 0.0);
+        let circle_2_new_pos = Vector3::new(0.15, 0.0, 0.0);
+        let expected_result: Option<f32> = None;
+        let res = super::CollisionSimulation::continous_circle_circle_collision_detection(
+            circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
+        assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res);
+    }
+
+    #[test]
+    fn test_continious_circle_collision_dynamic_dynamic_circles_x() {
+        let radius = 0.1;
+        let circle_1_old_pos = Vector3::new(-0.15, 0.0, 0.0);
+        let circle_1_new_pos = Vector3::new(-0.05, 0.0, 0.0);
+        let circle_2_old_pos = Vector3::new(0.15, 0.0, 0.0);
+        let circle_2_new_pos = Vector3::new(0.05, 0.0, 0.0);
+        let expected_result = 0.5;
+        let epsilon: f32 = 0.0001;
+        let res = super::CollisionSimulation::continous_circle_circle_collision_detection(
+            circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
+        assert_ne!(res, None, "Expected collision but got None");
+        let diff = res.unwrap() - expected_result;
+        assert!(diff.abs() < epsilon, "Expected {:?} but got {:?}", expected_result, res.unwrap());
+    }
+
+    #[test]
+    fn test_continious_circle_collision_dynamic_dynamic_circles_y() {
+        let radius = 0.1;
+        let circle_1_old_pos = Vector3::new(0.0, -0.15, 0.0);
+        let circle_1_new_pos = Vector3::new(0.0, -0.05, 0.0);
+        let circle_2_old_pos = Vector3::new(0.0, 0.15, 0.0);
+        let circle_2_new_pos = Vector3::new(0.0, 0.05, 0.0);
+        let expected_result = 0.5;
+        let epsilon: f32 = 0.0001;
+        let res = super::CollisionSimulation::continous_circle_circle_collision_detection(
+            circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
+        assert_ne!(res, None, "Expected collision but got None");
+        let diff = res.unwrap() - expected_result;
+        assert!(diff.abs() < epsilon, "Expected {:?} but got {:?}", expected_result, res.unwrap());
+    }
+
+    #[test]
+    fn test_continious_circle_collision_dynamic_dynamic_circles_different_velocities_collide() {
+        let radius = 0.1;
+        let circle_1_old_pos = Vector3::new(0.0, -0.15, 0.0);
+        let circle_1_new_pos = Vector3::new(0.0, -0.05, 0.0);
+        let circle_2_old_pos = Vector3::new(0.0, 0.2, 0.0);
+        let circle_2_new_pos = Vector3::new(0.0, 0.0, 0.0);
+        let expected_result = 0.5;
+        let epsilon: f32 = 0.0001;
+        let res = super::CollisionSimulation::continous_circle_circle_collision_detection(
+            circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
+        assert_ne!(res, None, "Expected collision but got None");
+        let diff = res.unwrap() - expected_result;
+        assert!(diff.abs() < epsilon, "Expected {:?} but got {:?}", expected_result, res.unwrap());
     }
 
 }
