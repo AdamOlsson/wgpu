@@ -122,14 +122,14 @@ impl CollisionSimulation {
         let b = 2.0 * (delta_h.dot(h_old_pos) + delta_g.dot(g_old_pos) - delta_h.dot(g_old_pos) - delta_g.dot(h_old_pos));
         let c = h_old_pos.dot(h_old_pos) + g_old_pos.dot(g_old_pos) - 2.0 * h_old_pos.dot(g_old_pos) - (radius_circle_1 + radius_circle_2).powi(2);
 
-        let discriminant = (b.powi(2) - 4.0 * a * c).abs();
+        let discriminant = b.powi(2) - 4.0 * a * c;
+
         if discriminant < 0.0 {
             // There exists no solition to the equation
             return None;
         }
         let t1 = (-b + f32::sqrt(discriminant)) / (2.0 * a);
         let t2 = (-b - f32::sqrt(discriminant)) / (2.0 * a);
-
         if t1 < 0.0 && t2 < 0.0 {
             // The collision happened in the past
             return None;
@@ -545,6 +545,32 @@ mod tests {
         assert_ne!(res, None, "Expected collision but got None");
         let diff = res.unwrap() - expected_result;
         assert!(diff.abs() < epsilon, "Expected {:?} but got {:?}", expected_result, res.unwrap());
+    }
+
+    #[test]
+    fn test_continious_circle_collision_dynamic_dynamic_circles_no_collision() {
+        let radius = 0.1;
+        let circle_1_old_pos = Vector3::new(-0.5, -0.2, 0.0);
+        let circle_1_new_pos = Vector3::new(-0.5, 0.0, 0.0);
+        let circle_2_old_pos = Vector3::new(0.5, 0.2, 0.0);
+        let circle_2_new_pos = Vector3::new(0.5, 0.0, 0.0);
+        let expected_result = None;
+        let res = super::CollisionSimulation::continous_circle_circle_collision_detection(
+            circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
+        assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res.unwrap());
+    }
+
+    #[test]
+    fn test_continious_circle_collision_dynamic_dynamic_circles_no_collision_2() {
+        let radius = 0.1;
+        let circle_1_old_pos = Vector3::new(-0.5, 0.2, 0.0);
+        let circle_1_new_pos = Vector3::new(-0.5, 0.0, 0.0);
+        let circle_2_old_pos = Vector3::new(0.5, 0.2, 0.0);
+        let circle_2_new_pos = Vector3::new(0.5, 0.0, 0.0);
+        let expected_result = None;
+        let res = super::CollisionSimulation::continous_circle_circle_collision_detection(
+            circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
+        assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res.unwrap());
     }
 
 }
