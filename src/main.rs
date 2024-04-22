@@ -9,10 +9,7 @@ pub mod collision_simulation;
 use std::time::Instant;
 
 use winit::{
-    event::*,
-    event_loop::EventLoopBuilder,
-    keyboard::{KeyCode, PhysicalKey},
-    window::WindowBuilder,
+    dpi::PhysicalSize, event::*, event_loop::EventLoopBuilder, keyboard::{KeyCode, PhysicalKey}, window::WindowBuilder
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -26,6 +23,7 @@ async fn run() {
         .unwrap();
     let event_loop_proxy = event_loop.create_proxy();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
+    let _ = window.request_inner_size(PhysicalSize::new(600, 600));
 
     let mut state = state::State::new(&window).await;
 

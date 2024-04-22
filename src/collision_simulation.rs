@@ -8,10 +8,10 @@ const MAX_INSTANCES: usize = 10000;
 
 #[derive(PartialEq)]
 enum Boundary {
-    Top,
-    Bottom,
-    Left,
-    Right,
+    _Top,
+    _Bottom,
+    _Left,
+    _Right,
     Horizontal,
     Vertical,
 }
@@ -19,6 +19,7 @@ enum Boundary {
 pub struct CollisionSimulation {
     pub positions: [Vector3<f32>; MAX_INSTANCES],
     pub colors: [Vector3<f32>; MAX_INSTANCES],
+    pub mass: [f32; MAX_INSTANCES],
     velocities: [Vector3<f32>; MAX_INSTANCES],
 
     pub num_instances: u32,
@@ -40,56 +41,57 @@ impl CollisionSimulation {
         let num_instances: u32 = 1000;
                 
         let positions = CollisionSimulation::generate_initial_positions(num_instances, radius);
-        // let mut positions = [Vector3::new(0.0, 0.0, 0.0); MAX_INSTANCES];
-        // positions[0] = Vector3::new(0.8, 0.8, 0.0);
         let colors = CollisionSimulation::genrate_random_colors();
         let velocities = CollisionSimulation::generate_random_velocities();
-        // let mut velocities = [Vector3::new(0.0, 0.0, 0.0); MAX_INSTANCES];
-        // velocities[0] = Vector3::new(0.001, 0.0, 0.0);
-
+        let mass = [1.0; MAX_INSTANCES];
         let vertices = Circle::compute_vertices([0.0, 0.0, 0.0], radius);
         let indices = Circle::compute_indices();
         let num_indices = (359)*3;
 
-        Self { positions, colors, velocities, num_instances, radius, indices, num_indices, vertices }
+        Self { positions, colors, mass, velocities, num_instances, radius, indices, num_indices, vertices }
     }
 
 
 
     pub fn update(&mut self) {
-
         for i in 0..self.num_instances as usize {
-            let new_pos = self.positions[i] + self.velocities[i];
-            // TODO: How should I handle a situation where the circle has two collisions in one timestep?
-            
-            for j in 0..self.num_instances as usize {
+            let new_pos = self.positions[i] + self.velocities[i];            
+            for j in i..self.num_instances as usize {
                 if i == j {
                     continue;
                 }
-
-
+                let pos_other = self.positions[j];
+                let new_pos_other = pos_other + self.velocities[j];
+                match CollisionSimulation::continous_circle_circle_collision_detection(
+                    self.positions[i], new_pos, self.radius, pos_other, new_pos_other, self.radius) {
+                    None => (), // No collision
+                    Some(t) if -1.0 <= t && t <= 1.0 => {
+                        let collision_point = self.positions[i] + t * self.velocities[i];
+                        let collision_point_other = pos_other + t * self.velocities[j];
+                        let normal = (collision_point - collision_point_other).normalize();
+                        let p = 2.0 * (self.velocities[i].dot(normal) - self.velocities[j].dot(normal)) / (self.mass[i] + self.mass[j]);
+                        let new_velocity_i = self.velocities[i] - p * self.mass[j] * normal;
+                        let new_velocity_j = self.velocities[j] + p * self.mass[i] * normal;
+                        self.velocities[i] = new_velocity_i;
+                        self.velocities[j] = new_velocity_j;
+                    },                    
+                    _ => (),
+                }
             }
 
 
             match CollisionSimulation::vertical_boundary_collision(self.positions[i], new_pos, self.velocities[i], self.radius) {
                 None => (), // No collision
-                Some(collision_point) => {
-                    let position_after_collision = CollisionSimulation::boundary_collision_response(
-                        self.positions[i], new_pos, collision_point, &mut self.velocities[i], Boundary::Vertical);
-                    self.positions[i] = position_after_collision;
-                    continue;
-                },
+                Some(collision_point) => 
+                    CollisionSimulation::boundary_collision_response(
+                        self.positions[i], new_pos, collision_point, &mut self.velocities[i], Boundary::Vertical),
             }
 
             match CollisionSimulation::horizontal_boundary_collision(self.positions[i], new_pos, self.velocities[i], self.radius) {
                 None => (), // No collision
-                Some(collision_point) => {
-                    let position_after_collision = CollisionSimulation::boundary_collision_response(
-                        self.positions[i], new_pos, collision_point, &mut self.velocities[i], Boundary::Horizontal);
-                    self.positions[i] = position_after_collision;
-                    continue;
-
-                },
+                Some(collision_point) => 
+                    CollisionSimulation::boundary_collision_response(
+                        self.positions[i], new_pos, collision_point, &mut self.velocities[i], Boundary::Horizontal),
             }
 
             self.positions[i] += self.velocities[i];
@@ -151,15 +153,14 @@ impl CollisionSimulation {
     /// Computes the new position of the circle after a collision with a boundary.
     ///
     /// Note: This function will change the velocity of the circle.
-    /// 
-    /// Returns the new position of the circle after the collision.
     fn boundary_collision_response(
-            curr_pos: Vector3<f32>, new_pos: Vector3<f32>,
-            collision_point: Vector3<f32>, velocity: &mut Vector3<f32>, boundary: Boundary) -> Vector3<f32> {
-        let travel_distance = curr_pos.distance2(new_pos);
-        let collision_distance = curr_pos.distance2(collision_point);
-        let travel_distance_after_collision = travel_distance - collision_distance;
-        let travel_distance_after_collision_percent = travel_distance_after_collision / travel_distance;
+            _curr_pos: Vector3<f32>, _new_pos: Vector3<f32>,
+            _collision_point: Vector3<f32>, velocity: &mut Vector3<f32>, boundary: Boundary) {
+        // We do not care to compute the exact position after the collision, only the new velocity
+        // let travel_distance = curr_pos.distance2(new_pos);
+        // let collision_distance = curr_pos.distance2(collision_point);
+        // let travel_distance_after_collision = travel_distance - collision_distance;
+        // let travel_distance_after_collision_percent = travel_distance_after_collision / travel_distance;
         
         if boundary == Boundary::Horizontal {
             velocity[1] = -velocity[1];
@@ -169,8 +170,8 @@ impl CollisionSimulation {
             panic!("Invalid boundary type. Valid types are Horizontal and Vertical");
         }
         
-        let position_after_collision = collision_point + (*velocity)*travel_distance_after_collision_percent;
-        position_after_collision
+        // let position_after_collision = collision_point + (*velocity)*travel_distance_after_collision_percent;
+        // position_after_collision
 
     }
 
