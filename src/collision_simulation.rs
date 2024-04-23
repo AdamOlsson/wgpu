@@ -55,18 +55,26 @@ impl CollisionSimulation {
 
     pub fn update(&mut self) {
         for i in 0..self.num_instances as usize {
-            let new_pos = self.positions[i] + self.velocities[i];            
+            let pos = self.positions[i];
+            let new_pos = pos + self.velocities[i];            
             for j in i..self.num_instances as usize {
                 if i == j {
                     continue;
                 }
+
                 let pos_other = self.positions[j];
                 let new_pos_other = pos_other + self.velocities[j];
+
+                if !CollisionSimulation::aabb_collision_detection(
+                        pos, new_pos, self.positions[j], self.positions[j] + self.velocities[j], self.radius) {
+                    continue;
+                }
+
                 match CollisionSimulation::continous_circle_circle_collision_detection(
-                    self.positions[i], new_pos, self.radius, pos_other, new_pos_other, self.radius) {
+                    pos, new_pos, self.radius, pos_other, new_pos_other, self.radius) {
                     None => (), // No collision
                     Some(t) if -1.0 <= t && t <= 1.0 => {
-                        let collision_point = self.positions[i] + t * self.velocities[i];
+                        let collision_point = pos + t * self.velocities[i];
                         let collision_point_other = pos_other + t * self.velocities[j];
                         let normal = (collision_point - collision_point_other).normalize();
                         let p = 2.0 * (self.velocities[i].dot(normal) - self.velocities[j].dot(normal)) / (self.mass[i] + self.mass[j]);
@@ -80,23 +88,61 @@ impl CollisionSimulation {
             }
 
 
-            match CollisionSimulation::vertical_boundary_collision(self.positions[i], new_pos, self.velocities[i], self.radius) {
+            match CollisionSimulation::vertical_boundary_collision(pos, new_pos, self.velocities[i], self.radius) {
                 None => (), // No collision
                 Some(collision_point) => 
                     CollisionSimulation::boundary_collision_response(
-                        self.positions[i], new_pos, collision_point, &mut self.velocities[i], Boundary::Vertical),
+                        pos, new_pos, collision_point, &mut self.velocities[i], Boundary::Vertical),
             }
 
-            match CollisionSimulation::horizontal_boundary_collision(self.positions[i], new_pos, self.velocities[i], self.radius) {
+            match CollisionSimulation::horizontal_boundary_collision(pos, new_pos, self.velocities[i], self.radius) {
                 None => (), // No collision
                 Some(collision_point) => 
                     CollisionSimulation::boundary_collision_response(
-                        self.positions[i], new_pos, collision_point, &mut self.velocities[i], Boundary::Horizontal),
+                        pos, new_pos, collision_point, &mut self.velocities[i], Boundary::Horizontal),
             }
 
             self.positions[i] += self.velocities[i];
 
         }
+    }
+
+    /// Axis-aligned bounding box collision detection.
+    /// 
+    /// Axis-aligned bounding box narrow collision detection algorithm that
+    /// can be used to determine if two 2D shapes are intersecting. The algorithm
+    /// works by projecting the shapes onto a set of axes and checking if the projections
+    /// overlap. If the projections overlap, the shapes are intersecting.
+    /// 
+    /// To create a linear collision detection we use the start and end position of the
+    /// objects and create a bounding bounding box. We then project the bounding box onto
+    /// the axises and check if the projections overlap.
+    fn aabb_collision_detection(
+            pos: Vector3<f32>, new_pos: Vector3<f32>,
+            pos_other: Vector3<f32>, new_pos_other: Vector3<f32>,
+            radius: f32) -> bool{
+
+        // Check x-axis
+        let x1_start = pos[0].min(new_pos[0]) - radius;
+        let x1_end = pos[0].max(new_pos[0]) + radius;
+        let x2_start = pos_other[0].min(new_pos_other[0]) - radius;
+        let x2_end = pos_other[0].max(new_pos_other[0]) + radius;
+        
+        if x1_end < x2_start || x1_start > x2_end {
+            return false;
+        }
+
+        // Check y-axis
+        let y1_start = pos[1].min(new_pos[1]) - radius;
+        let y1_end = pos[1].max(new_pos[1]) + radius;
+        let y2_start = pos_other[1].min(new_pos_other[1]) - radius;
+        let y2_end = pos_other[1].max(new_pos_other[1]) + radius;
+
+        if y1_end < y2_start || y1_start > y2_end {
+            return false;
+        }
+
+        true
     }
     
     /// Computes the time of collision between two circles.
@@ -572,6 +618,58 @@ mod tests {
         let res = super::CollisionSimulation::continous_circle_circle_collision_detection(
             circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
         assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res.unwrap());
+    }
+
+    #[test]
+    fn aabb_collision_detection_x_axis_separated() {
+        let radius = 0.1;
+        let pos = Vector3::new(-0.2, 0.0, 0.0);
+        let new_pos = Vector3::new(-0.1, 0.0, 0.0);
+        let pos_other = Vector3::new(0.2, 0.0, 0.0);
+        let new_pos_other = Vector3::new(0.3, 0.0, 0.0);
+        let expected_result = false;
+        let res = super::CollisionSimulation::aabb_collision_detection(
+            pos, new_pos, pos_other, new_pos_other, radius);
+        assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res);
+    }
+
+    #[test]
+    fn aabb_collision_detection_x_axis_collision() {
+        let radius = 0.1;
+        let pos = Vector3::new(0.0, 0.0, 0.0);
+        let new_pos = Vector3::new(0.1, 0.0, 0.0);
+        let pos_other = Vector3::new(0.2, 0.0, 0.0);
+        let new_pos_other = Vector3::new(0.3, 0.0, 0.0);
+        let expected_result = true;
+        let res = super::CollisionSimulation::aabb_collision_detection(
+            pos, new_pos, pos_other, new_pos_other, radius);
+        assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res);
+    }
+
+    #[test]
+    fn aabb_collision_detection_y_axis_separated() {
+        let radius = 0.1;
+        let pos = Vector3::new(0.0, -0.2, 0.0);
+        let new_pos = Vector3::new(0.0, -0.1, 0.0);
+        let pos_other = Vector3::new(0.0, 0.2, 0.0);
+        let new_pos_other = Vector3::new(0.0, 0.3, 0.0);
+        let expected_result = false;
+        let res = super::CollisionSimulation::aabb_collision_detection(
+            pos, new_pos, pos_other, new_pos_other, radius);
+        assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res);
+    }
+
+    #[test]
+    fn aabb_collision_detection_y_axis_collision() {
+        let radius = 0.1;
+        let pos = Vector3::new(0.0, 0.0, 0.0);
+        let new_pos = Vector3::new(0.0, 0.1, 0.0);
+        let pos_other = Vector3::new(0.0, 0.2, 0.0);
+        let new_pos_other = Vector3::new(0.0, 0.3, 0.0);
+        let expected_result = true;
+        let res = super::CollisionSimulation::aabb_collision_detection(
+            pos, new_pos, pos_other, new_pos_other, radius);
+        assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res);        
     }
 
 }
