@@ -33,6 +33,7 @@ struct Object {
     control_bits: u8,
 }
 
+#[derive(Clone, Copy, Debug)]
 struct CollisionCell {
     offset: usize,
     num_objects: u32,
@@ -200,6 +201,11 @@ impl SpatialSubdivision2D {
         let mut current_cell_id = cell_id_array[0];
         let mut count = 0;
         for id in cell_id_array {
+            // Early stoping as all empy cells are at the end of the array
+            if id == &u32::MAX {
+                objects_per_cell[current_cell_id as usize] = count;
+                break;
+            }
             if id == &current_cell_id {
                 count += 1;
             } else {
@@ -216,35 +222,38 @@ impl SpatialSubdivision2D {
 
         let mut offset = 0;
         let mut last_processed_id = usize::MAX;
-        for id in 0..cell_id_array.len() {
+        for id in cell_id_array {
+            // Early stoping as all empy cells are at the end of the array
+            if id == &u32::MAX {
+                break;
+            }
 
-            if id == last_processed_id {
+            let index = *id as usize;
+            if index == last_processed_id {
                 offset += 1;
                 continue;
             }
-            last_processed_id = id;
+            last_processed_id = index.clone();
 
             // No objects in this cell
-            if objects_per_cell[id] == 0 {
+            if objects_per_cell[index] == 0 {
                 continue;
             }
 
             // No collision will happen in this cell as there only is one item
-            if objects_per_cell[id] == 1 {
+            if objects_per_cell[index] == 1 {
                 offset += 1;
                 continue;
             }
 
             // Collision will happen in this cell
-            let num_objects_in_current_cell = objects_per_cell[id];            
+            let num_objects_in_current_cell = objects_per_cell[index];
             let collision = CollisionCell {
                 offset: offset.clone() as usize,
                 num_objects: num_objects_in_current_cell,
-                // num_home_ids,
-                // num_phantom_ids,
             };
            
-            let cell_type = self.cell_id_to_cell_type(id as u32);
+            let cell_type = self.cell_id_to_cell_type(index as u32);
             match cell_type {
                 0 => pass0.push(collision),
                 1 => pass1.push(collision),
@@ -653,7 +662,7 @@ mod tests {
     }
 
     mod test_create_collision_cell_list {
-        use crate::spatial_subdivision::{Object, SpatialSubdivision2D, SPATIAL_SUBDIVISION_2D_CELL_OFFSET};
+        use crate::spatial_subdivision::{CollisionCell, Object, SpatialSubdivision2D, SPATIAL_SUBDIVISION_2D_CELL_OFFSET};
 
         #[test]
         fn test_create_collision_cell_list_no_collisions(){
@@ -682,16 +691,124 @@ mod tests {
         }
 
         #[test]
-        fn test_create_collision_cell_list_one_collision_pass_0(){}
+        fn test_create_collision_cell_list_one_collision_pass_0(){
+            let cell_size = 0.1;
+            let ss = SpatialSubdivision2D::new(cell_size);
+            let expected_result = CollisionCell {
+                offset: 0,
+                num_objects: 2,
+            };
+            let bboxes = vec![
+                cgmath::Vector4::new(-0.99, 0.99, 0.01, 0.01),
+                cgmath::Vector4::new(-0.94, 0.94, 0.01, 0.01),
+            ];
+            let invalid_cell_id = u32::MAX;
+            let mut cell_id_array: Vec<u32> = vec![invalid_cell_id;   bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
+            let mut object_id_array: Vec<Object> = vec![Object{id: invalid_cell_id, control_bits: 0}.clone(); bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
+    
+            ss.constuct_arrays(bboxes, &mut cell_id_array, &mut object_id_array);
+            SpatialSubdivision2D::sort_arrays(&mut cell_id_array, &mut object_id_array);
+
+            let passes = ss.create_collision_cell_list(&cell_id_array);
+            let (pass0, pass1, pass2, pass3) = passes;
+
+            assert_eq!(pass0.len(), 1);
+            assert_eq!(pass0[0].offset, expected_result.offset);
+            assert_eq!(pass0[0].num_objects, expected_result.num_objects);
+            assert!(pass1.is_empty());
+            assert!(pass2.is_empty());
+            assert!(pass3.is_empty());
+        }
 
         #[test]
-        fn test_create_collision_cell_list_one_collision_pass_1(){}
+        fn test_create_collision_cell_list_one_collision_pass_1(){
+            let cell_size = 0.1;
+            let ss = SpatialSubdivision2D::new(cell_size);
+            let expected_result = CollisionCell {
+                offset: 0,
+                num_objects: 2,
+            };
+            let bboxes = vec![
+                cgmath::Vector4::new(-0.89, 0.99, 0.01, 0.01),
+                cgmath::Vector4::new(-0.84, 0.94, 0.01, 0.01),
+            ];
+            let invalid_cell_id = u32::MAX;
+            let mut cell_id_array: Vec<u32> = vec![invalid_cell_id;   bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
+            let mut object_id_array: Vec<Object> = vec![Object{id: invalid_cell_id, control_bits: 0}.clone(); bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
+    
+            ss.constuct_arrays(bboxes, &mut cell_id_array, &mut object_id_array);
+            SpatialSubdivision2D::sort_arrays(&mut cell_id_array, &mut object_id_array);
+
+            let passes = ss.create_collision_cell_list(&cell_id_array);
+            let (pass0, pass1, pass2, pass3) = passes;
+
+            assert!(pass0.is_empty());
+            assert_eq!(pass1.len(), 1);
+            assert_eq!(pass1[0].offset, expected_result.offset);
+            assert_eq!(pass1[0].num_objects, expected_result.num_objects);
+            assert!(pass2.is_empty());
+            assert!(pass3.is_empty());
+        }
 
         #[test]
-        fn test_create_collision_cell_list_one_collision_pass_2(){}
+        fn test_create_collision_cell_list_one_collision_pass_2(){
+            let cell_size = 0.1;
+            let ss = SpatialSubdivision2D::new(cell_size);
+            let expected_result = CollisionCell {
+                offset: 0,
+                num_objects: 2,
+            };
+            let bboxes = vec![
+                cgmath::Vector4::new(-0.99, 0.89, 0.01, 0.01),
+                cgmath::Vector4::new(-0.94, 0.84, 0.01, 0.01),
+            ];
+            let invalid_cell_id = u32::MAX;
+            let mut cell_id_array: Vec<u32> = vec![invalid_cell_id;   bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
+            let mut object_id_array: Vec<Object> = vec![Object{id: invalid_cell_id, control_bits: 0}.clone(); bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
+    
+            ss.constuct_arrays(bboxes, &mut cell_id_array, &mut object_id_array);
+            SpatialSubdivision2D::sort_arrays(&mut cell_id_array, &mut object_id_array);
+
+            let passes = ss.create_collision_cell_list(&cell_id_array);
+            let (pass0, pass1, pass2, pass3) = passes;
+
+            assert!(pass0.is_empty());
+            assert!(pass1.is_empty());
+            assert_eq!(pass2.len(), 1);
+            assert_eq!(pass2[0].offset, expected_result.offset);
+            assert_eq!(pass2[0].num_objects, expected_result.num_objects);
+            assert!(pass3.is_empty());
+        }
 
         #[test]
-        fn test_create_collision_cell_list_one_collision_pass_3(){}
+        fn test_create_collision_cell_list_one_collision_pass_3(){
+            let cell_size = 0.1;
+            let ss = SpatialSubdivision2D::new(cell_size);
+            let expected_result = CollisionCell {
+                offset: 0,
+                num_objects: 2,
+            };
+            let bboxes = vec![
+                cgmath::Vector4::new(-0.89, 0.89, 0.01, 0.01),
+                cgmath::Vector4::new(-0.84, 0.84, 0.01, 0.01),
+            ];
+            let invalid_cell_id = u32::MAX;
+            let mut cell_id_array: Vec<u32> = vec![invalid_cell_id;   bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
+            let mut object_id_array: Vec<Object> = vec![Object{id: invalid_cell_id, control_bits: 0}.clone(); bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
+    
+            ss.constuct_arrays(bboxes, &mut cell_id_array, &mut object_id_array);
+            SpatialSubdivision2D::sort_arrays(&mut cell_id_array, &mut object_id_array);
+
+            let passes = ss.create_collision_cell_list(&cell_id_array);
+            let (pass0, pass1, pass2, pass3) = passes;
+
+            assert!(pass0.is_empty());
+            assert!(pass1.is_empty());
+            assert!(pass2.is_empty());
+            assert_eq!(pass3.len(), 1);
+            assert_eq!(pass3[0].offset, expected_result.offset);
+            assert_eq!(pass3[0].num_objects, expected_result.num_objects);
+        }
 
         #[test]
         fn test_create_collision_cell_list_one_collisions_different_home_cells(){}
