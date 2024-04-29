@@ -52,7 +52,6 @@ impl CollisionSimulation {
     }
 
 
-
     pub fn update(&mut self) {
         for i in 0..self.num_instances as usize {
             let pos = self.positions[i];

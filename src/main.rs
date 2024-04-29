@@ -5,6 +5,7 @@ mod world;
 mod shapes;
 mod state;
 pub mod collision_simulation;
+mod spatial_subdivision;
 
 use std::time::Instant;
 
