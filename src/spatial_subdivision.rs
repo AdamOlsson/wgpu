@@ -227,7 +227,7 @@ impl SpatialSubdivision2D {
             if id == &u32::MAX {
                 break;
             }
-
+            println!("offset {:?}, {:?}", offset, id);
             let index = *id as usize;
             if index == last_processed_id {
                 offset += 1;
@@ -245,7 +245,7 @@ impl SpatialSubdivision2D {
                 offset += 1;
                 continue;
             }
-
+            println!("Add collision");
             // Collision will happen in this cell
             let num_objects_in_current_cell = objects_per_cell[index];
             let collision = CollisionCell {
@@ -261,6 +261,7 @@ impl SpatialSubdivision2D {
                 3 => pass3.push(collision),
                 _ => panic!("Unexpected cell type"),
             }
+            offset += 1;
         }
 
         return (pass0, pass1, pass2, pass3);
@@ -811,13 +812,110 @@ mod tests {
         }
 
         #[test]
-        fn test_create_collision_cell_list_one_collisions_different_home_cells(){}
+        fn test_create_collision_cell_list_one_collisions_different_home_cells(){
+            let cell_size = 0.1;
+            let ss = SpatialSubdivision2D::new(cell_size);
+            let expected_result = CollisionCell {
+                offset: 0,
+                num_objects: 2,
+            };
+            let bboxes = vec![
+                cgmath::Vector4::new(-0.99, 0.99, 0.01, 0.01),
+                cgmath::Vector4::new(-0.925, 0.925, 0.1, 0.1),
+            ];
+            let invalid_cell_id = u32::MAX;
+            let mut cell_id_array: Vec<u32> = vec![invalid_cell_id;   bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
+            let mut object_id_array: Vec<Object> = vec![Object{id: invalid_cell_id, control_bits: 0}.clone(); bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
+    
+            ss.constuct_arrays(bboxes, &mut cell_id_array, &mut object_id_array);
+            SpatialSubdivision2D::sort_arrays(&mut cell_id_array, &mut object_id_array);
+
+            let passes = ss.create_collision_cell_list(&cell_id_array);
+            let (pass0, pass1, pass2, pass3) = passes;
+
+            assert_eq!(pass0.len(), 1);
+            assert_eq!(pass0[0].offset, expected_result.offset);
+            assert_eq!(pass0[0].num_objects, expected_result.num_objects);
+            assert!(pass1.is_empty());
+            assert!(pass2.is_empty());
+            assert!(pass3.is_empty());
+        }
 
         #[test]
-        fn test_create_collision_cell_list_two_collisions_different(){}
+        fn test_create_collision_cell_list_two_collisions_different_home_cells(){
+            let cell_size = 0.1;
+            let ss = SpatialSubdivision2D::new(cell_size);
+            let expected_result_pass_0 = CollisionCell {
+                offset: 0,
+                num_objects: 2,
+            };
+            let expected_result_pass_1 = CollisionCell {
+                offset: 2,
+                num_objects: 2,
+            };
+            let bboxes = vec![
+                cgmath::Vector4::new(-0.99, 0.99, 0.01, 0.01),
+                cgmath::Vector4::new(-0.925, 0.925, 0.1, 0.1),
+                cgmath::Vector4::new(-0.88, 0.98, 0.01, 0.01),
+            ];
+            let invalid_cell_id = u32::MAX;
+            let mut cell_id_array: Vec<u32> = vec![invalid_cell_id;   bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
+            let mut object_id_array: Vec<Object> = vec![Object{id: invalid_cell_id, control_bits: 0}.clone(); bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
+    
+            ss.constuct_arrays(bboxes, &mut cell_id_array, &mut object_id_array);
+            SpatialSubdivision2D::sort_arrays(&mut cell_id_array, &mut object_id_array);
+
+            let passes = ss.create_collision_cell_list(&cell_id_array);
+            let (pass0, pass1, pass2, pass3) = passes;
+
+            assert_eq!(pass0.len(), 1);
+            assert_eq!(pass0[0].offset, expected_result_pass_0.offset);
+            assert_eq!(pass0[0].num_objects, expected_result_pass_0.num_objects);
+            assert_eq!(pass1.len(), 1);
+            assert_eq!(pass1[0].offset, expected_result_pass_1.offset);
+            assert_eq!(pass1[0].num_objects, expected_result_pass_1.num_objects);
+            assert!(pass2.is_empty());
+            assert!(pass3.is_empty());
+        }
 
         #[test]
-        fn test_create_collision_cell_list_pass_2_different_sectors(){}
+        fn test_create_collision_cell_list_pass_2_different_sectors(){
+            let cell_size = 0.1;
+            let ss = SpatialSubdivision2D::new(cell_size);
+            let expected_result_1 = CollisionCell {
+                offset: 0,
+                num_objects: 2,
+            };
+            let expected_result_2 = CollisionCell {
+                offset: 2,
+                num_objects: 2,
+            };
+            let bboxes = vec![
+                cgmath::Vector4::new(-0.99, 0.89, 0.01, 0.01),
+                cgmath::Vector4::new(-0.94, 0.84, 0.01, 0.01),
+                cgmath::Vector4::new(-0.99, 0.69, 0.01, 0.01),
+                cgmath::Vector4::new(-0.94, 0.64, 0.01, 0.01),
+
+            ];
+            let invalid_cell_id = u32::MAX;
+            let mut cell_id_array: Vec<u32> = vec![invalid_cell_id;   bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
+            let mut object_id_array: Vec<Object> = vec![Object{id: invalid_cell_id, control_bits: 0}.clone(); bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
+    
+            ss.constuct_arrays(bboxes, &mut cell_id_array, &mut object_id_array);
+            SpatialSubdivision2D::sort_arrays(&mut cell_id_array, &mut object_id_array);
+
+            let passes = ss.create_collision_cell_list(&cell_id_array);
+            let (pass0, pass1, pass2, pass3) = passes;
+
+            assert!(pass0.is_empty());
+            assert!(pass1.is_empty());
+            assert_eq!(pass2.len(), 2);
+            assert_eq!(pass2[0].offset, expected_result_1.offset);
+            assert_eq!(pass2[0].num_objects, expected_result_1.num_objects);
+            assert_eq!(pass2[1].offset, expected_result_2.offset);
+            assert_eq!(pass2[1].num_objects, expected_result_2.num_objects);
+            assert!(pass3.is_empty());
+        }
     }
 
 }
