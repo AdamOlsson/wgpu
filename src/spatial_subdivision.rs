@@ -272,7 +272,27 @@ impl SpatialSubdivision2D {
         return (pass0, pass1, pass2, pass3);
     }
 
-    fn collision_check() {}
+    /// Check if two objects need a detailed collision check.
+    /// 
+    /// If one of the object home cells, T' is:
+    /// - less than pass number
+    /// - (and) among the cell types that are common to both objects
+    /// we can skip the collision check.
+    /// 
+    /// Returns true if the detailed collision check can be skipped.
+    fn skip_detailed_collision_check(a: &Object, b: &Object, pass_num: u8) -> bool {
+        let home_cell_type_a = a.control_bits >> 4;
+        let home_cell_type_b = b.control_bits >> 4;
+        let less_than_pass_num = home_cell_type_a < pass_num || home_cell_type_b < pass_num;
+        
+        let common_cell_types = a.control_bits & b.control_bits & 0b00001111;
+        let home_cell_type_bit_flag_a = 1 << home_cell_type_a;
+        let home_cell_type_bit_flag_b = 1 << home_cell_type_b;
+        let home_cell_among_commong_cell_types = 
+                home_cell_type_bit_flag_a & common_cell_types > 0 ||
+                home_cell_type_bit_flag_b & common_cell_types > 0;
+        return less_than_pass_num && home_cell_among_commong_cell_types;
+    }
 
     /// Given a list of bounding boxes, construct the cell id array for the cell grid
     /// 
@@ -302,31 +322,7 @@ impl SpatialSubdivision2D {
             let offset = collision.offset;
             let num_objects = collision.num_objects;
             for i in 0..num_objects {
-                // Before performing a collision test between two objects during pass T,
-                // we first find out if one of the objects' home cell type, called T' is both:
-                // - less than T 
-                // - among the cell types that are common to both objects
-                //    (obtained by ANDing their 2 d control bits)
-                let object = object_id_array[offset + i as usize];
-                let object_bbox = bboxes[object.id as usize];
-                // TODO: Might need to include all phantom cells in the object control bits
-                // As the home cell types is from 0 to 3 and the phantom cell types is a set bit from 4 bits
-                let home_cell_type = 1 << (object.control_bits >> 4);
-                for j in i..num_objects {
-                    if i == j {
-                        continue;
-                    }
-                    let other_object = object_id_array[offset + j as usize];
-                    let other_object_bbox = bboxes[other_object.id as usize];
-                    let common_cell_types = object.control_bits & other_object.control_bits;
-                    let other_home_cell_type = 1 << ( other_object.control_bits >> 4);
-
-                    let less_than_t = home_cell_type < 1 && other_home_cell_type < 1;
-                    //  find out if one of the objects' home cell type are common to both objects (obtained by ANDing their 2 d control bits).
-                    if less_than_t && home_cell_type == other_home_cell_type && common_cell_types > 0 {
-                        // Perform collision test
-                    }
-                }
+                // TODO: Implement collision check
             }
         }
                     
@@ -958,6 +954,50 @@ mod tests {
             assert_eq!(pass2[1].offset, expected_result_2.offset);
             assert_eq!(pass2[1].num_objects, expected_result_2.num_objects);
             assert!(pass3.is_empty());
+        }
+    }
+
+    mod test_collision_check {
+        use crate::spatial_subdivision::{Object, SpatialSubdivision2D};
+
+        #[test]
+        fn test_skip_detailed_collision_check_1() {
+            let a = Object  {
+                id: 0,
+                control_bits: 0b111100,
+            };
+            let b = Object {
+                id: 1,
+                control_bits: 0b101100,
+            };
+
+            let mut pass_num = 2;
+            let mut result = SpatialSubdivision2D::skip_detailed_collision_check(&a, &b, pass_num);
+            assert_eq!(result, false);
+
+            pass_num = 3;
+            result = SpatialSubdivision2D::skip_detailed_collision_check(&a, &b, pass_num);
+            assert_eq!(result, true);
+        }
+
+        #[test]
+        fn test_skip_detailed_collision_check_2() {
+            let a = Object  {
+                id: 0,
+                control_bits: 0b000101,
+            };
+            let b = Object {
+                id: 1,
+                control_bits: 0b100101,
+            };
+
+            let mut pass_num = 0;
+            let mut result = SpatialSubdivision2D::skip_detailed_collision_check(&a, &b, pass_num);
+            assert_eq!(result, false);
+
+            pass_num = 2;
+            result = SpatialSubdivision2D::skip_detailed_collision_check(&a, &b, pass_num);
+            assert_eq!(result, true);
         }
     }
 
