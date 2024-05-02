@@ -359,7 +359,7 @@ impl SpatialSubdivision2D {
                 
                 let pos_a = positions[object_id_array[offset + i as usize].id as usize];
                 let vel_a = velocities[object_id_array[offset + i as usize].id as usize];
-                let new_pos_b = pos_a + vel_a;
+                let new_pos_a = pos_a + vel_a;
                 let a = object_id_array[offset + i as usize];
                 
                 for j in i+1..num_objects {
@@ -372,7 +372,7 @@ impl SpatialSubdivision2D {
                     if SpatialSubdivision2D::skip_detailed_collision_check(&a, &b, 1) {
                         continue;
                     }
-                    match collision_check_fn(pos_a, new_pos_b, radius, pos_b, new_pos_b, radius) {
+                    match collision_check_fn(pos_a, new_pos_a, radius, pos_b, new_pos_b, radius) {
                         Some(ttc) if -1.0 <= ttc && ttc <= 1.0  => {
                             let mut va = velocities[a.id as usize].clone();
                             let mut vb = velocities[b.id as usize].clone();
