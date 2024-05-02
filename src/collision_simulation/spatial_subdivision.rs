@@ -1,8 +1,4 @@
-use core::num;
-use std::cell;
-
-use cgmath::{num_traits::Pow, Vector2, Vector4};
-use rand::seq::index;
+use cgmath::{Vector2, Vector3, Vector4};
 
 /* 
 Cell ID layout:
@@ -41,7 +37,7 @@ struct CollisionCell {
     // num_phantom_ids: u32,
 }
 
-struct SpatialSubdivision2D {
+pub struct SpatialSubdivision2D {
     cell_size: f32,
     num_cells: u32,
 }
@@ -294,8 +290,26 @@ impl SpatialSubdivision2D {
         return less_than_pass_num && home_cell_among_commong_cell_types;
     }
 
+    fn create_bboxes(positions: &[Vector3<f32>; 10000],
+            velocities: &[Vector3<f32>; 10000], radius: f32,
+            num_instances: usize
+    ) -> Vec<Vector4<f32>>{
+        let mut bboxes: Vec<Vector4<f32>> = Vec::new();
+        for (i, pos) in positions.iter().enumerate() {
+            let new_pos = pos + velocities[i];
+            let top_left_x = pos[0].min(new_pos[0]) - radius;
+            let top_left_y = pos[1].max(new_pos[1]) + radius;
+            let bot_right_x = pos[0].max(new_pos[0]) + radius;
+            let bot_left_y = pos[1].min(new_pos[1]) - radius;
+            let width = (bot_right_x - top_left_x).abs();
+            let height = (top_left_y - bot_left_y).abs();
+            bboxes.push(Vector4::new(top_left_x, top_left_y, width, height));
+        }
+        return bboxes;
+    }
+
+    /// TODO
     /// Given a list of bounding boxes, construct the cell id array for the cell grid
-    /// 
     /// Args:
     /// - bboxes: A list of bounding boxes in the format of (x, y, z, w)
     ///         where x, y is the top left corner and z, w is the width and height.
@@ -303,8 +317,26 @@ impl SpatialSubdivision2D {
     ///         of the bounding box are expected to be between -1.0 and 1.0. Furthermore,
     ///         each bounding box is expected to be axis-aligned.
     ///          
-    fn create_spatial_subdivision(&mut self, bboxes: Vec<Vector4<f32>>) {
-        // TODO: Make sure the grid cell size is as large as the largest velocity
+    pub fn run(&self,
+            positions: &mut [Vector3<f32>; 10000],
+            velocities: &mut [Vector3<f32>; 10000],
+            num_instances: usize,
+            collision_check_fn: 
+                fn( Vector3<f32>, Vector3<f32>, f32, 
+                    Vector3<f32>, Vector3<f32>, f32) -> Option<f32>,
+            collision_response_fn: 
+                fn(ttc: f32, 
+                    &mut Vector3<f32>, &mut Vector3<f32>,
+                    &mut Vector3<f32>, &mut Vector3<f32>,
+                    f32, f32),
+            radius: f32,
+            mass: &[f32; 10000],
+        ){
+        // TODO: Also find the grid size in create_bboxes
+        panic!("Need to dynamically set the grid size");
+
+        let bboxes = SpatialSubdivision2D::create_bboxes(positions, velocities, radius, num_instances);
+
         let invalid_cell_id = u32::MAX;
         let mut cell_id_array: Vec<u32> = vec![invalid_cell_id;   bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
         let mut object_id_array: Vec<Object> = vec![Object{id: invalid_cell_id, control_bits: 0}.clone(); bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
@@ -315,28 +347,55 @@ impl SpatialSubdivision2D {
         SpatialSubdivision2D::sort_arrays(&mut cell_id_array, &mut object_id_array);
 
         // Create the collision cell list
-        let passes = self.create_collision_cell_list(&cell_id_array);
-        let (pass1, pass2, pass3, pass4) = passes;
+        let (pass0, pass1, pass2, pass3) = self.create_collision_cell_list(&cell_id_array);
+        
+        panic!("Need to run through all passes");
 
-        for collision in pass1 {
+
+        for collision in pass0 {
             let offset = collision.offset;
             let num_objects = collision.num_objects;
             for i in 0..num_objects {
-                // TODO: Implement collision check
+                
+                let pos_a = positions[object_id_array[offset + i as usize].id as usize];
+                let vel_a = velocities[object_id_array[offset + i as usize].id as usize];
+                let new_pos_b = pos_a + vel_a;
+                let a = object_id_array[offset + i as usize];
+                
+                for j in i+1..num_objects {
+                
+                    let pos_b = positions[object_id_array[offset + j as usize].id as usize];
+                    let vel_b = velocities[object_id_array[offset + j as usize].id as usize];
+                    let new_pos_b = pos_b + vel_b;
+                    let b = object_id_array[offset + j as usize];
+                
+                    if SpatialSubdivision2D::skip_detailed_collision_check(&a, &b, 1) {
+                        continue;
+                    }
+                    match collision_check_fn(pos_a, new_pos_b, radius, pos_b, new_pos_b, radius) {
+                        Some(ttc) if -1.0 <= ttc && ttc <= 1.0  => {
+                            let mut va = velocities[a.id as usize].clone();
+                            let mut vb = velocities[b.id as usize].clone();
+                            let mut pa = positions[a.id as usize].clone();
+                            let mut pb = positions[b.id as usize].clone();
+                            let massa = mass[a.id as usize];
+                            let massb = mass[b.id as usize];
+                            collision_response_fn(ttc, &mut va, &mut vb, &mut pa, &mut pb, massa, massb);
+                            
+                            velocities[a.id as usize] = va;
+                            velocities[b.id as usize] = vb;
+                        },
+                        _ => ()
+                    }
+                }
             }
         }
-                    
     }
 
-    fn construct_passes(&mut self, bboxes: Vec<Vector4<f32>>) {
-        self.create_spatial_subdivision(bboxes);
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::SpatialSubdivision2D;
-
     mod test_point_to_cell_id {
         use super::super::SpatialSubdivision2D;
         #[test]
@@ -525,9 +584,7 @@ mod tests {
     }
 
     mod test_construct_arrays {
-        use crate::spatial_subdivision::{Object, SPATIAL_SUBDIVISION_2D_CELL_OFFSET};
-
-        use super::super::SpatialSubdivision2D;
+        use crate::collision_simulation::spatial_subdivision::{Object, SpatialSubdivision2D, SPATIAL_SUBDIVISION_2D_CELL_OFFSET};
         
         #[test]
         fn test_construct_arrays_one_object_max_num_phantom_cells(){
@@ -669,9 +726,7 @@ mod tests {
     }
 
     mod test_sort_arrays {
-        use crate::spatial_subdivision::{Object, SPATIAL_SUBDIVISION_2D_CELL_OFFSET};
-
-        use super::super::SpatialSubdivision2D;
+        use crate::collision_simulation::spatial_subdivision::{Object, SpatialSubdivision2D, SPATIAL_SUBDIVISION_2D_CELL_OFFSET};
 
         #[test]
         fn test_sort_arrays() {
@@ -702,7 +757,9 @@ mod tests {
     }
 
     mod test_create_collision_cell_list {
-        use crate::spatial_subdivision::{CollisionCell, Object, SpatialSubdivision2D, SPATIAL_SUBDIVISION_2D_CELL_OFFSET};
+        // use super::{CollisionCell, Object, SpatialSubdivision2D, SPATIAL_SUBDIVISION_2D_CELL_OFFSET};
+
+        use crate::collision_simulation::spatial_subdivision::{CollisionCell, Object, SpatialSubdivision2D, SPATIAL_SUBDIVISION_2D_CELL_OFFSET};
 
         #[test]
         fn test_create_collision_cell_list_no_collisions(){
@@ -958,8 +1015,7 @@ mod tests {
     }
 
     mod test_collision_check {
-        use crate::spatial_subdivision::{Object, SpatialSubdivision2D};
-
+        use crate::collision_simulation::spatial_subdivision::{Object, SpatialSubdivision2D};
         #[test]
         fn test_skip_detailed_collision_check_1() {
             let a = Object  {

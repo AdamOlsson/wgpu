@@ -1,10 +1,9 @@
-use wgpu::{Device, Queue, Surface};
-
 pub mod vertex;
 pub mod render_pass;
 pub mod instance;
 pub mod graphics_context;
 
+use wgpu::{Device, Queue, Surface};
 pub trait Pass {
     fn draw(
         &mut self,

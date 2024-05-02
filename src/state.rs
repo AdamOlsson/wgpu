@@ -1,6 +1,6 @@
 use winit::window::Window;
 
-use crate::{collision_simulation::CollisionSimulation, renderer_backend::{graphics_context::GraphicsContext, instance::Instance, render_pass::RenderPass, vertex, Pass}, shapes::circle::{self, Circle}};
+use crate::{collision_simulation::collision_simulation::CollisionSimulation, renderer_backend::{graphics_context::GraphicsContext, instance::Instance, render_pass::RenderPass, Pass}};
 
 
 pub struct State<'a> {

@@ -2,7 +2,9 @@ use cgmath::{InnerSpace, MetricSpace, Vector3};
 
 use rand::Rng;
 
-use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
+use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle, };
+
+// use super::spatial_subdivision::SpatialSubdivision2D;
 
 const MAX_INSTANCES: usize = 10000;
 
@@ -51,8 +53,41 @@ impl CollisionSimulation {
         Self { positions, colors, mass, velocities, num_instances, radius, indices, num_indices, vertices }
     }
 
+    /// Computes the response of a collision between two circles.
+    /// 
+    /// Args:
+    /// - ttc: Time to collision
+    /// - va: Velocity of circle A
+    /// - vb: Velocity of circle B
+    /// - pa: Position of circle A
+    /// - pb: Position of circle B
+    /// - ma: Mass of circle A
+    /// - mb: Mass of circle B
+    /// 
+    /// The function computes the new velocities of the circles after a collision.
+    fn circle_circle_collision_response(
+            ttc: f32, 
+            va: &mut Vector3<f32>, vb: &mut Vector3<f32>,
+            pa: &mut Vector3<f32>, pb: &mut Vector3<f32>,
+            ma: f32, mb: f32) {
+        let collision_point_a = *pa + ttc * (*va);
+        let collision_point_other = *pb + ttc * (*vb);
+        let normal = (collision_point_a - collision_point_other).normalize();
+        let p = 2.0 * (va.dot(normal) - vb.dot(normal)) / (ma + mb);
+        let new_velocity_i = *va - p * mb * normal;
+        let new_velocity_j = *vb + p * ma * normal;
+        *va = new_velocity_i;
+        *vb = new_velocity_j;
+    }
 
     pub fn update(&mut self) {
+        // let ss = SpatialSubdivision2D::new(0.1);
+        // ss.run(&mut self.positions, &mut self.velocities, self.num_instances as usize,
+        //     CollisionSimulation::continous_circle_circle_collision_detection,
+        //     CollisionSimulation::circle_circle_collision_response,
+        //     self.radius, &self.mass );
+
+        
         for i in 0..self.num_instances as usize {
             let pos = self.positions[i];
             let new_pos = pos + self.velocities[i];            
@@ -69,18 +104,22 @@ impl CollisionSimulation {
                     continue;
                 }
 
+
                 match CollisionSimulation::continous_circle_circle_collision_detection(
                     pos, new_pos, self.radius, pos_other, new_pos_other, self.radius) {
                     None => (), // No collision
                     Some(t) if -1.0 <= t && t <= 1.0 => {
-                        let collision_point = pos + t * self.velocities[i];
-                        let collision_point_other = pos_other + t * self.velocities[j];
-                        let normal = (collision_point - collision_point_other).normalize();
-                        let p = 2.0 * (self.velocities[i].dot(normal) - self.velocities[j].dot(normal)) / (self.mass[i] + self.mass[j]);
-                        let new_velocity_i = self.velocities[i] - p * self.mass[j] * normal;
-                        let new_velocity_j = self.velocities[j] + p * self.mass[i] * normal;
-                        self.velocities[i] = new_velocity_i;
-                        self.velocities[j] = new_velocity_j;
+                        let mut va = self.velocities[i].clone();
+                        let mut vb = self.velocities[j].clone();
+                        let mut pa = self.positions[i].clone();
+                        let mut pb = self.positions[j].clone();
+                        
+                        CollisionSimulation::circle_circle_collision_response(
+                            t, &mut va, &mut vb, &mut pa, &mut pb,
+                            self.mass[i], self.mass[j]);
+
+                        self.velocities[i] = va;
+                        self.velocities[j] = vb;
                     },                    
                     _ => (),
                 }

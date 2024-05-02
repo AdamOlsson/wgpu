@@ -4,8 +4,8 @@ mod texture;
 mod world;
 mod shapes;
 mod state;
-pub mod collision_simulation;
-mod spatial_subdivision;
+mod collision_simulation;
+
 
 use std::time::Instant;
 
