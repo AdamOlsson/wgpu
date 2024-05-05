@@ -1,4 +1,6 @@
-use cgmath::{InnerSpace, MetricSpace, Vector3};
+
+
+use cgmath::{InnerSpace, MetricSpace, Vector3, Vector4};
 
 use rand::Rng;
 
@@ -80,8 +82,40 @@ impl CollisionSimulation {
         *vb = new_velocity_j;
     }
 
+    fn create_bbox(pos: Vector3<f32>, vel: Vector3<f32>, radius: f32) -> Vector4<f32> {
+        let new_pos = pos + vel;
+        let top_left_x = pos[0].min(new_pos[0]) - radius;
+        let top_left_y = pos[1].max(new_pos[1]) + radius;
+        let bot_right_x = pos[0].max(new_pos[0]) + radius;
+        let bot_left_y = pos[1].min(new_pos[1]) - radius;
+        let width = (bot_right_x - top_left_x).abs();
+        let height = (top_left_y - bot_left_y).abs();
+        Vector4::new(top_left_x, top_left_y, width, height)
+    }
+
+    fn create_bounding_sphere(pos: Vector3<f32>, vel: Vector3<f32>, r: f32) -> Vector3<f32> {
+        let new_pos = pos + vel;
+        let center = (pos + new_pos) / 2.0;
+        let radius = (pos - center).magnitude();
+        let sphere_total_radius = (radius + r) * f32::sqrt(2.0);
+        Vector3::new(center[0], center[1], sphere_total_radius)
+    }
+
     pub fn update(&mut self) {
-        // let ss = SpatialSubdivision2D::new(0.1);
+        // Define bounding spheres and the grid cell size
+        // let mut bounding_spheres = Vec::new();
+        // let mut max_bounding_radius = 0.0;
+        // for i in 0..self.num_instances as usize {
+        //     let bounding_sphere = CollisionSimulation::create_bounding_sphere(self.positions[i], self.velocities[i], self.radius);
+        //     let radius = bounding_sphere[2];
+            
+        //     if radius > max_bounding_radius {
+        //         max_bounding_radius = radius;
+        //     }
+        //     bounding_spheres.push(bounding_sphere);
+        // }
+        // let cell_size = max_bounding_radius 2.0 * * 1.5;
+        // let ss = SpatialSubdivision2D::new(cell_size);
         // ss.run(&mut self.positions, &mut self.velocities, self.num_instances as usize,
         //     CollisionSimulation::continous_circle_circle_collision_detection,
         //     CollisionSimulation::circle_circle_collision_response,

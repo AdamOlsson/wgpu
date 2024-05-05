@@ -1,4 +1,6 @@
-use cgmath::{Vector2, Vector3, Vector4};
+use core::num;
+
+use cgmath::{InnerSpace, Vector2, Vector3};
 
 /* 
 Cell ID layout:
@@ -71,57 +73,91 @@ impl SpatialSubdivision2D {
         y as u32 * self.num_cells + x as u32
     }
 
-    /// Compute the cell ids that are covered by the bounding box.
-    /// 
-    /// Given a bounding box, compute the cell ids that are covered by the bounding box.
-    /// Assumes that the given bounding box have points between 0.0 and 2.0 and that
-    /// the bounding box is axis-aligned.
-    /// 
-    /// Because the bounding box is axis-aligned, we can assume that the top left and
-    /// top right point lie on the same row. Therefore, any cell id between the top left
-    /// and top right cell id is considered to be covered by the bounding box. The same
-    /// logic applies to the bottom left and bottom right cell id and the middle cell ids.
-    /// 
-    /// Returns a list of cell ids that are covered by the bounding box.
-    fn compute_phantom_cell_ids(&self, bbox: Vector4<f32>) -> Vec<u32>{
-        let top_left = Vector2::new(bbox.x, bbox.y);
-        let top_right = Vector2::new(bbox.x + bbox.z, bbox.y);
-        let bottom_left = Vector2::new(bbox.x, bbox.y - bbox.w);
-        let bottom_right = Vector2::new(bbox.x + bbox.z, bbox.y - bbox.w);
+    fn get_cell_id_center(cell_id: u32, cell_size: f32, num_cells: u32) -> Vector2<f32> {
+        let x = (cell_id % num_cells) as f32 * cell_size + cell_size / 2.0;
+        let y =  2.0 - (cell_id / num_cells) as f32 * cell_size - cell_size / 2.0;
+        Vector2::new(x, y)
+    }
 
-        let top_left_cell_id = self.point_to_cell_id(top_left);
-        let top_right_cell_id = self.point_to_cell_id(top_right);
-        let top_cell_ids: Vec<u32> = (top_left_cell_id..=top_right_cell_id).collect();
+    /// Given a cell return all neighbor cell ids.
+    fn get_neighbor_cell_ids(cell_id: i32, num_cells: i32) -> [u32;8] {
+        
+        let top_cell_id: i32  = cell_id - num_cells;
+        let bottom_cell_id: i32  = cell_id + num_cells;
 
-        let bottom_left_cell_id = self.point_to_cell_id(bottom_left);
-        let bottom_right_cell_id = self.point_to_cell_id(bottom_right);
-        let bottom_cell_ids: Vec<u32> = (bottom_left_cell_id..=bottom_right_cell_id).collect();
-
-        // Because the bboxes are axis-aligned, we can assume that the top and bottom
-        // cell ids have an equal number of cells
-        if bottom_cell_ids.len() != top_cell_ids.len() {
-            panic!("Top and bottom cell ids have different lengths");
+        let left_cell_id: i32;
+        let top_left_cell_id: i32;
+        let bottom_left_cell_id: i32;
+        if cell_id % num_cells < 1 {
+            // Left edge, set to arbitrary negative value
+            left_cell_id = -1;
+            top_left_cell_id = -1;
+            bottom_left_cell_id = -1;
+        } else {
+            left_cell_id = cell_id - 1;
+            top_left_cell_id = cell_id - num_cells - 1;
+            bottom_left_cell_id = cell_id + num_cells - 1;
         }
-        // In the scenario we have a bbox covers multiple rows, we need to compute the middle cell ids
-        let mut middle_cell_ids: Vec<Vec<u32>> = Vec::new();
-        top_cell_ids
-            .iter()
-            .zip(bottom_cell_ids.iter())
-            .for_each(
-                |(top, bot)| {
-                    // println!("{:?} {:?}", top, bot);
-                    middle_cell_ids.push( (*top..=*bot).step_by(self.num_cells as usize).collect());
+
+        let right_cell_id: i32;
+        let top_right_cell_id: i32;
+        let bottom_right_cell_id: i32;
+        if cell_id % num_cells >= num_cells - 1 {
+            // Right edge, set to arbitrary negative value
+            right_cell_id = -1;
+            top_right_cell_id = -1;
+            bottom_right_cell_id = -1;
+        } else {
+            right_cell_id = cell_id + 1;
+            top_right_cell_id = cell_id - num_cells + 1;
+            bottom_right_cell_id = cell_id + num_cells + 1;
+        }
+
+        let neighbors_i32 = [
+            top_left_cell_id, top_cell_id, top_right_cell_id,
+            left_cell_id, right_cell_id,
+            bottom_left_cell_id, bottom_cell_id, bottom_right_cell_id
+        ];
+
+        let mut neighbors: [u32;8] = [u32::MAX;8];
+        for i in 0..8 {
+            if 0 <= neighbors_i32[i] && neighbors_i32[i] < num_cells.pow(2){
+                neighbors[i] = neighbors_i32[i] as u32;
             }
-        );
+        }
+        return neighbors
+    }
 
-        // Merge all cell ids and remove duplicates
-        let mut phantom_cell_ids: Vec<u32> = top_cell_ids.iter().chain(bottom_cell_ids.iter()).chain(middle_cell_ids.iter().flatten()).copied().collect();
-        phantom_cell_ids.sort();
-        phantom_cell_ids.dedup();
+    /// Compute the cell ids that are covered by the bounding sphere.
+    /// 
+    /// Given a bounding sphere, compute the cell ids that are covered by the bounding box.
+    /// Assumes that the given bounding box have points between 0.0 and 2.0. 
+    /// 
+    /// Returns a list of cell ids that are covered by the bounding box where the first
+    /// cell id is the home cell id.
+    fn compute_phantom_cell_ids(&self, bounding_sphere: Vector3<f32>, cell_size: f32, num_cells: u32) -> Vec<u32> {        
+        let sphere_center = Vector2::new(bounding_sphere.x, bounding_sphere.y);
+        let sphere_radius = bounding_sphere.z;
+        let home_cell_id = self.point_to_cell_id(sphere_center);
 
+        // The bounding sphere can only overlap 4 of these cells
+        let neighbors_ids = SpatialSubdivision2D::get_neighbor_cell_ids(home_cell_id as i32, num_cells as i32);
 
+        let mut phantom_cell_ids: Vec<u32> = Vec::new();
+        phantom_cell_ids.push(home_cell_id);
+        for neighbor_id in neighbors_ids.iter() {
+            if neighbor_id == &u32::MAX {
+                continue;
+            }
+            let neighbor_center = SpatialSubdivision2D::get_cell_id_center(*neighbor_id, cell_size, num_cells);
+
+            let sphere_edge_point = (neighbor_center - sphere_center).normalize() * sphere_radius + sphere_center;
+            let edge_cell = self.point_to_cell_id(sphere_edge_point);
+            if neighbor_id == &edge_cell {
+                phantom_cell_ids.push(*neighbor_id);
+            }
+        }
         return phantom_cell_ids;
-
     }
 
     /// Given a cell id, return the cell type.
@@ -141,47 +177,36 @@ impl SpatialSubdivision2D {
         return (row + col).try_into().unwrap();
     }
 
-    fn compute_home_cell_id(&self, bbox: Vector4<f32>) -> u32 {
-        let center_x = bbox.x + (bbox.z / 2.0);
-        let center_y = bbox.y - (bbox.w / 2.0);
+    fn compute_home_cell_id(&self, bounding_sphere: Vector3<f32>) -> u32 {
+        let center_x = bounding_sphere.x + (bounding_sphere.z / 2.0);
+        let center_y = bounding_sphere.y - (bounding_sphere.z / 2.0);
         return self.point_to_cell_id(Vector2::new(center_x, center_y));
     }
 
-    fn constuct_arrays(&self, bboxes: &Vec<Vector4<f32>>, cells: &mut Vec<u32>, objects: &mut Vec<Object>) {
-        for (i, bbox) in bboxes.iter().enumerate() {
-            let offset = i * SPATIAL_SUBDIVISION_2D_CELL_OFFSET;
+    fn constuct_arrays(&self, bounding_spheres: &Vec<Vector3<f32>>, cells: &mut Vec<u32>, objects: &mut Vec<Object>) {
+        for (i, bbox) in bounding_spheres.iter().enumerate() {
             // Offset the bbox to have 0.0 and bottom left corner
-            let bbox_offset = bbox + Vector4::new(1.0, 1.0, 0.0, 0.0);
+            let offset = i * SPATIAL_SUBDIVISION_2D_CELL_OFFSET;
+            let bbox_offset = bbox + Vector3::new(1.0, 1.0, 0.0);
             
-            let home_cell_id = self.compute_home_cell_id(bbox_offset);
-            let phantom_cell_ids = self.compute_phantom_cell_ids(bbox_offset);
+            let phantom_cell_ids = self.compute_phantom_cell_ids(bbox_offset, self.cell_size, self.num_cells);
+            let home_cell_id = phantom_cell_ids[0];
+
             
             let mut phantom_cell_bits: u8 = 0;
             for cell_id in phantom_cell_ids.iter() {
                 phantom_cell_bits |= 1 << self.cell_id_to_cell_type(cell_id.clone());
             }
-    
-            // Note that the home cell id is included in the phantom cell ids
-            // debug_assert!(phantom_cell_ids.len() <= 4, "Did not expect bounding box volume to cover more than 4 cells.");
-
+            
             let home_cell_type = self.cell_id_to_cell_type(home_cell_id);
             let object = Object {
                 id: i as u32,
                 control_bits: (home_cell_type << 4 | phantom_cell_bits)
             };
 
-            // Assign first cell id to home cell id
-            cells[offset] = home_cell_id;
-            objects[offset] = object.clone();
-
-            let mut phantom_offset = 1; // Because index 0 is the home cell id
-            for cell_id in phantom_cell_ids.iter() {
-                if cell_id == &home_cell_id {
-                    continue;
-                }
-                cells[offset + phantom_offset] = cell_id.clone();
-                objects[offset + phantom_offset] = object.clone();
-                phantom_offset += 1;
+            for (count,cell_id) in phantom_cell_ids.iter().enumerate() {
+                cells[offset + count] = cell_id.clone();
+                objects[offset + count] = object.clone();
             }
         }
     }
@@ -290,25 +315,6 @@ impl SpatialSubdivision2D {
         return less_than_pass_num && home_cell_among_commong_cell_types;
     }
 
-    fn create_bboxes(positions: &[Vector3<f32>; 10000],
-            velocities: &[Vector3<f32>; 10000], radius: f32,
-            num_instances: usize
-    ) -> Vec<Vector4<f32>>{
-        let mut bboxes: Vec<Vector4<f32>> = Vec::new();
-        for (i, pos) in positions.iter().enumerate() {
-            let new_pos = pos + velocities[i];
-            let top_left_x = pos[0].min(new_pos[0]) - radius;
-            let top_left_y = pos[1].max(new_pos[1]) + radius;
-            let bot_right_x = pos[0].max(new_pos[0]) + radius;
-            let bot_left_y = pos[1].min(new_pos[1]) - radius;
-            let width = (bot_right_x - top_left_x).abs();
-            let height = (top_left_y - bot_left_y).abs();
-            bboxes.push(Vector4::new(top_left_x, top_left_y, width, height));
-        }
-        return bboxes;
-    }
-
-    /// TODO
     /// Given a list of bounding boxes, construct the cell id array for the cell grid
     /// Args:
     /// - bboxes: A list of bounding boxes in the format of (x, y, z, w)
@@ -331,17 +337,16 @@ impl SpatialSubdivision2D {
                     f32, f32),
             radius: f32,
             mass: &[f32; 10000],
+            bounding_spheres: &Vec<Vector3<f32>>,
         ){
-        // TODO: Also find the grid size in create_bboxes
-        panic!("Need to dynamically set the grid size");
 
-        let bboxes = SpatialSubdivision2D::create_bboxes(positions, velocities, radius, num_instances);
-
+        
+        let num_of_bounding_sphere = bounding_spheres.len();
         let invalid_cell_id = u32::MAX;
-        let mut cell_id_array: Vec<u32> = vec![invalid_cell_id;   bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
-        let mut object_id_array: Vec<Object> = vec![Object{id: invalid_cell_id, control_bits: 0}.clone(); bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
+        let mut cell_id_array: Vec<u32> = vec![invalid_cell_id;   num_of_bounding_sphere * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
+        let mut object_id_array: Vec<Object> = vec![Object{id: invalid_cell_id, control_bits: 0}.clone(); num_of_bounding_sphere * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
 
-        self.constuct_arrays(&bboxes, &mut cell_id_array, &mut object_id_array);
+        self.constuct_arrays(&bounding_spheres, &mut cell_id_array, &mut object_id_array);
         
         // Sort the arrays according to the cell id
         SpatialSubdivision2D::sort_arrays(&mut cell_id_array, &mut object_id_array);
@@ -457,81 +462,134 @@ mod tests {
             let point = cgmath::Vector2::new(2.0, 2.0);
             assert_eq!(ss.point_to_cell_id(point), 13);
         }
+
+        #[test]
+        fn test_point_to_cell_id_temp() {
+            let cell_size = 0.1;
+            let ss = SpatialSubdivision2D::new(cell_size);
+            let point = cgmath::Vector2::new(0.1029385, 0.082769275);
+            assert_eq!(ss.point_to_cell_id(point), 381);
+        }
     }
 
     mod test_compute_phantom_cell_ids {
         use std::vec;
 
+        use cgmath::num_traits::Float;
+
         use super::super::SpatialSubdivision2D;
 
         #[test]
-        fn test_compute_phantom_cell_ids_span_single_cell() {
+        fn test_compute_phantom_cell_ids_span_no_other_than_home() {
             let cell_size = 0.1;
-            let bbox = cgmath::Vector4::new(0.1, 2.0, 0.05, 0.05);
-            let expected_result = vec![1];
-            let ss = SpatialSubdivision2D::new(cell_size);
-            let result = ss.compute_phantom_cell_ids(bbox);
+            let radius = cell_size / (2.0 * 1.5);
+            let num_cells = (2.0 / cell_size).ceil() as u32;
+            let bbox = cgmath::Vector3::new(0.05, 1.95, radius);
+            let expected_result = vec![0];
+            let ss = SpatialSubdivision2D::new(1.0);
+            let result = ss.compute_phantom_cell_ids(bbox, cell_size, num_cells);
             assert_eq!(result, expected_result);
         }
 
         #[test]
-        fn test_compute_phantom_cell_ids_span_to_cells_in_row() {
+        fn test_compute_phantom_cell_ids_span_neighbor_row_cell() {
             let cell_size = 0.1;
-            let bbox = cgmath::Vector4::new(0.0, 2.0, 0.15, 0.05);
-            let expected_result = vec![0, 1];
+            let radius = cell_size / (2.0 * 1.5);
+            let num_cells = (2.0 / cell_size).ceil() as u32;
+            let bbox = cgmath::Vector3::new(0.08, 0.05, radius);
+            let expected_result = vec![380, 381];
             let ss = SpatialSubdivision2D::new(cell_size);
-            let result = ss.compute_phantom_cell_ids(bbox);
+            let result = ss.compute_phantom_cell_ids(bbox, cell_size, num_cells);
             assert_eq!(result, expected_result);
         }
 
         #[test]
-        fn test_compute_phantom_cell_ids_3_by_3_top_left() {
+        fn test_compute_phantom_cell_ids_2_by_2_top_left() {
             let cell_size = 0.1;
-            let bbox = cgmath::Vector4::new(0.0, 2.0, 0.2, 0.2);
-            let expected_result = vec![0,1,2,20,21,22,40,41,42];
+            let radius = cell_size / (2.0 * 1.5);
+            let num_cells = (2.0 / cell_size).ceil() as u32;
+            let bbox = cgmath::Vector3::new(0.1, 1.9, radius);
+            let expected_result = vec![21,0,1,20];
             let ss = SpatialSubdivision2D::new(cell_size);
-            let result = ss.compute_phantom_cell_ids(bbox);
+            let result = ss.compute_phantom_cell_ids(bbox, cell_size, num_cells);
             assert_eq!(result, expected_result);
         }
 
         #[test]
-        fn test_compute_phantom_cell_ids_3_by_3_bottom_right() {
+        fn test_compute_phantom_cell_ids_2_by_2_bottom_right() {
             let cell_size = 0.1;
-            let bbox = cgmath::Vector4::new(1.7, 0.3, 0.2, 0.2);
-            let expected_result = vec![357,358,359,377,378,379,397,398,399];
+            let radius = cell_size / (2.0 * 1.5);
+            let num_cells = (2.0 / cell_size).ceil() as u32;
+            let bbox = cgmath::Vector3::new(1.9, 0.1, radius);
+            let expected_result = vec![399,378,379,398];
             let ss = SpatialSubdivision2D::new(cell_size);
-            let result = ss.compute_phantom_cell_ids(bbox);
+            let result = ss.compute_phantom_cell_ids(bbox, cell_size, num_cells);
             assert_eq!(result, expected_result);
         }
 
         #[test]
-        fn test_compute_phantom_cell_ids_3_by_3_bottom_left() {
+        fn test_compute_phantom_cell_ids_2_by_2_bottom_left() {
             let cell_size = 0.1;
-            let bbox = cgmath::Vector4::new(0.0, 0.3, 0.2, 0.2);
-            let expected_result = vec![340,341,342,360,361,362,380,381,382];
+            let radius = cell_size / (2.0 * 1.5);
+            let num_cells = (2.0 / cell_size).ceil() as u32;
+            let bbox = cgmath::Vector3::new(0.1, 0.1, radius);
+            let expected_result = vec![381,360,361,380];
             let ss = SpatialSubdivision2D::new(cell_size);
-            let result = ss.compute_phantom_cell_ids(bbox);
+            let result = ss.compute_phantom_cell_ids(bbox, cell_size, num_cells);
             assert_eq!(result, expected_result);
         }
 
         #[test]
-        fn test_compute_phantom_cell_ids_3_by_3_top_right() {
+        fn test_compute_phantom_cell_ids_2_by_2_top_right() {
             let cell_size = 0.1;
-            let bbox = cgmath::Vector4::new(1.7, 2.0, 0.2, 0.2);
-            let expected_result = vec![17,18,19,37,38,39,57,58,59];
+            let radius = cell_size / (2.0 * 1.5);
+            let num_cells = (2.0 / cell_size).ceil() as u32;
+            let bbox = cgmath::Vector3::new(1.9, 1.9, radius);
+            let expected_result = vec![39,18,19,38];
             let ss = SpatialSubdivision2D::new(cell_size);
-            let result = ss.compute_phantom_cell_ids(bbox);
+            let result = ss.compute_phantom_cell_ids(bbox, cell_size, num_cells);
             assert_eq!(result, expected_result);
         }
 
         #[test]
         fn test_compute_phantom_cell_ids_middle() {
             let cell_size = 0.1;
-            let bbox = cgmath::Vector4::new(1.0, 1.0, 0.2, 0.2);
-            let expected_result = vec![210,211,212,230,231,232,250,251,252];
+            let radius = cell_size / (2.0 * 1.5);
+            let num_cells = (2.0 / cell_size).ceil() as u32;
+            let bbox = cgmath::Vector3::new(1.0, 1.0, radius);
+            let expected_result = vec![210,189,190,209];
             let ss = SpatialSubdivision2D::new(cell_size);
-            let result = ss.compute_phantom_cell_ids(bbox);
+            let result = ss.compute_phantom_cell_ids(bbox, cell_size, num_cells);
             assert_eq!(result, expected_result);
+        }
+    }
+
+    mod test_get_cell_id_center {
+        use cgmath::InnerSpace;
+
+        use super::super::SpatialSubdivision2D;
+        #[test]
+        fn test_get_cell_id_center_top_left() {
+            let cell_size = 0.1;
+            let num_cells = 20;
+            let cell_id = 0;
+            let allowed_diff = 0.0001;
+            let expected_result = cgmath::Vector2::new(0.05, 1.95);
+            let result = SpatialSubdivision2D::get_cell_id_center(cell_id, cell_size, num_cells);
+            let diff = (result - expected_result).magnitude();
+            assert!(diff < allowed_diff);
+        }
+
+        #[test]
+        fn test_get_cell_id_center_bottom_right() {
+            let cell_size = 0.1;
+            let num_cells = 20;
+            let cell_id = 399;
+            let allowed_diff = 0.0001;
+            let expected_result = cgmath::Vector2::new(1.95, 0.05);
+            let result = SpatialSubdivision2D::get_cell_id_center(cell_id, cell_size, num_cells);
+            let diff = (result - expected_result).magnitude();
+            assert!(diff < allowed_diff);
         }
     }
 
@@ -589,6 +647,7 @@ mod tests {
         #[test]
         fn test_construct_arrays_one_object_max_num_phantom_cells(){
             let cell_size = 0.1;
+            let radius = cell_size / (2.0 * 1.5);
             let ss = SpatialSubdivision2D::new(cell_size);
 
             let home_cell_id = 0;
@@ -596,7 +655,7 @@ mod tests {
             let phantom_cell_id_2 = 20;
             let phantom_cell_id_3 = 21;
             let bboxes = vec![
-                cgmath::Vector4::new(-0.975, 0.975, 0.1, 0.1),
+                cgmath::Vector3::new(-0.901, 0.901, radius),
             ];
 
             let invalid_cell_id = u32::MAX;
@@ -634,12 +693,13 @@ mod tests {
         #[test]
         fn test_construct_arrays_one_object_1_phantom_cell() {
             let cell_size = 0.1;
+            let radius = cell_size / (2.0 * 1.5);
             let ss = SpatialSubdivision2D::new(cell_size);
 
             let home_cell_id = 379;
             let phantom_cell_id_1 = 399;
             let bboxes = vec![
-                cgmath::Vector4::new(0.925, -0.825, 0.05, 0.1),
+                cgmath::Vector3::new(0.95, -0.89, radius),
             ];
 
             let invalid_cell_id = u32::MAX;
@@ -672,6 +732,7 @@ mod tests {
         #[test]
         fn test_construct_arrays_two_overlapping_bboxes() {
             let cell_size = 0.1;
+            let radius = cell_size / (2.0 * 1.5);
             let ss = SpatialSubdivision2D::new(cell_size);
 
             let home_cell_id_1 = 20;
@@ -679,8 +740,8 @@ mod tests {
             let phantom_cell_id_1 = 21;
             let phantom_cell_id_2 = 22;
             let bboxes = vec![
-                cgmath::Vector4::new(-0.975, 0.875, 0.1, 0.05),
-                cgmath::Vector4::new(-0.875, 0.875, 0.1, 0.05),
+                cgmath::Vector3::new(-0.901, 0.85, radius),
+                cgmath::Vector3::new(-0.801, 0.85, radius),
             ];
 
             let invalid_cell_id = u32::MAX;
@@ -711,7 +772,6 @@ mod tests {
                 assert_eq!(object_id_array[i].control_bits, 0);
             }
 
-
             assert_eq!(cell_id_array[0], home_cell_id_1);
             assert_eq!(cell_id_array[1], phantom_cell_id_1);
             assert_eq!(cell_id_array[2], invalid_cell_id);
@@ -731,12 +791,13 @@ mod tests {
         #[test]
         fn test_sort_arrays() {
             let cell_size = 0.1;
+            let radius = cell_size / (2.0 * 1.5);
             let ss = SpatialSubdivision2D::new(cell_size);
 
             let bboxes = vec![
-                cgmath::Vector4::new(-0.975, 0.975, 0.1, 0.1),
-                cgmath::Vector4::new(-0.975, 0.975, 0.15, 0.05),
-                cgmath::Vector4::new(-0.975, 0.825, 0.05, 0.1),
+                cgmath::Vector3::new(-0.901, 0.901, radius),
+                cgmath::Vector3::new(-0.901, 0.95, radius),
+                cgmath::Vector3::new(-0.95, 0.801, radius),
             ];
 
             let expected_cell_id_array = [0,0,1,1,20,20,21,40,u32::MAX,u32::MAX,u32::MAX,u32::MAX];
@@ -756,6 +817,55 @@ mod tests {
         }
     }
 
+    mod test_get_neighbor_cell_ids {
+        use crate::collision_simulation::spatial_subdivision::SpatialSubdivision2D;
+
+        #[test]
+        fn test_get_neighbor_cell_ids_top_left() {
+            let center_cell = 0;
+            let num_cells = 20;
+            let expected_result = [u32::MAX, u32::MAX, u32::MAX, u32::MAX, 1, u32::MAX, 20, 21];
+            let neighbors = SpatialSubdivision2D::get_neighbor_cell_ids(center_cell, num_cells);
+            assert_eq!(neighbors, expected_result);
+        }
+
+        #[test]
+        fn test_get_neighbor_cell_ids_top_right() {
+            let center_cell = 19;
+            let num_cells = 20;
+            let expected_result = [u32::MAX, u32::MAX, u32::MAX, 18, u32::MAX, 38, 39, u32::MAX];
+            let neighbors = SpatialSubdivision2D::get_neighbor_cell_ids(center_cell, num_cells);
+            assert_eq!(neighbors, expected_result);
+        }
+
+        #[test]
+        fn test_get_neighbor_cell_ids_bottom_left() {
+            let center_cell = 380;
+            let num_cells = 20;
+            let expected_result = [u32::MAX, 360, 361, u32::MAX, 381, u32::MAX, u32::MAX, u32::MAX];
+            let neighbors = SpatialSubdivision2D::get_neighbor_cell_ids(center_cell, num_cells);
+            assert_eq!(neighbors, expected_result);
+        }
+
+        #[test]
+        fn test_get_neighbor_cell_ids_bottom_right() {
+            let center_cell = 399;
+            let num_cells = 20;
+            let expected_result = [378, 379, u32::MAX, 398, u32::MAX, u32::MAX, u32::MAX, u32::MAX];
+            let neighbors = SpatialSubdivision2D::get_neighbor_cell_ids(center_cell, num_cells);
+            assert_eq!(neighbors, expected_result);
+        }
+
+        #[test]
+        fn test_get_neighbor_cell_ids_not_corner() {
+            let center_cell = 21;
+            let num_cells = 20;
+            let expected_result = [0, 1, 2, 20, 22, 40, 41, 42];
+            let neighbors = SpatialSubdivision2D::get_neighbor_cell_ids(center_cell, num_cells);
+            assert_eq!(neighbors, expected_result);
+        }
+    }
+
     mod test_create_collision_cell_list {
         // use super::{CollisionCell, Object, SpatialSubdivision2D, SPATIAL_SUBDIVISION_2D_CELL_OFFSET};
 
@@ -764,12 +874,13 @@ mod tests {
         #[test]
         fn test_create_collision_cell_list_no_collisions(){
             let cell_size = 0.1;
+            let radius = cell_size / (2.0 * 1.5);
             let ss = SpatialSubdivision2D::new(cell_size);
 
             let bboxes = vec![
-                cgmath::Vector4::new(-0.975, 0.975, 0.1, 0.05),
-                cgmath::Vector4::new(-0.975, 0.875, 0.1, 0.05),
-                cgmath::Vector4::new(-0.775, 0.975, 0.05, 0.1),
+                cgmath::Vector3::new(-0.901, 0.95, radius),
+                cgmath::Vector3::new(-0.901, 0.85, radius),
+                cgmath::Vector3::new(-0.75, 0.901, radius),
             ];
             let invalid_cell_id = u32::MAX;
             let mut cell_id_array: Vec<u32> = vec![invalid_cell_id;   bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
@@ -790,14 +901,15 @@ mod tests {
         #[test]
         fn test_create_collision_cell_list_one_collision_pass_0(){
             let cell_size = 0.1;
+            let radius = cell_size / (2.0 * 1.5);
             let ss = SpatialSubdivision2D::new(cell_size);
             let expected_result = CollisionCell {
                 offset: 0,
                 num_objects: 2,
             };
             let bboxes = vec![
-                cgmath::Vector4::new(-0.99, 0.99, 0.01, 0.01),
-                cgmath::Vector4::new(-0.94, 0.94, 0.01, 0.01),
+                cgmath::Vector3::new(-0.95, 0.95, radius),
+                cgmath::Vector3::new(-0.95, 0.95, radius),
             ];
             let invalid_cell_id = u32::MAX;
             let mut cell_id_array: Vec<u32> = vec![invalid_cell_id;   bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
@@ -820,14 +932,15 @@ mod tests {
         #[test]
         fn test_create_collision_cell_list_one_collision_pass_1(){
             let cell_size = 0.1;
+            let radius = cell_size / (2.0 * 1.5);
             let ss = SpatialSubdivision2D::new(cell_size);
             let expected_result = CollisionCell {
                 offset: 0,
                 num_objects: 2,
             };
             let bboxes = vec![
-                cgmath::Vector4::new(-0.89, 0.99, 0.01, 0.01),
-                cgmath::Vector4::new(-0.84, 0.94, 0.01, 0.01),
+                cgmath::Vector3::new(-0.85, 0.95,radius),
+                cgmath::Vector3::new(-0.85, 0.95,radius),
             ];
             let invalid_cell_id = u32::MAX;
             let mut cell_id_array: Vec<u32> = vec![invalid_cell_id;   bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
@@ -850,14 +963,15 @@ mod tests {
         #[test]
         fn test_create_collision_cell_list_one_collision_pass_2(){
             let cell_size = 0.1;
+            let radius = cell_size / (2.0 * 1.5);
             let ss = SpatialSubdivision2D::new(cell_size);
             let expected_result = CollisionCell {
                 offset: 0,
                 num_objects: 2,
             };
             let bboxes = vec![
-                cgmath::Vector4::new(-0.99, 0.89, 0.01, 0.01),
-                cgmath::Vector4::new(-0.94, 0.84, 0.01, 0.01),
+                cgmath::Vector3::new(-0.95, 0.85, radius),
+                cgmath::Vector3::new(-0.95, 0.85, radius),
             ];
             let invalid_cell_id = u32::MAX;
             let mut cell_id_array: Vec<u32> = vec![invalid_cell_id;   bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
@@ -880,14 +994,15 @@ mod tests {
         #[test]
         fn test_create_collision_cell_list_one_collision_pass_3(){
             let cell_size = 0.1;
+            let radius = cell_size / (2.0 * 1.5);
             let ss = SpatialSubdivision2D::new(cell_size);
             let expected_result = CollisionCell {
                 offset: 0,
                 num_objects: 2,
             };
             let bboxes = vec![
-                cgmath::Vector4::new(-0.89, 0.89, 0.01, 0.01),
-                cgmath::Vector4::new(-0.84, 0.84, 0.01, 0.01),
+                cgmath::Vector3::new(-0.85, 0.85, radius),
+                cgmath::Vector3::new(-0.85, 0.85, radius),
             ];
             let invalid_cell_id = u32::MAX;
             let mut cell_id_array: Vec<u32> = vec![invalid_cell_id;   bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
@@ -910,14 +1025,15 @@ mod tests {
         #[test]
         fn test_create_collision_cell_list_one_collisions_different_home_cells(){
             let cell_size = 0.1;
+            let radius = cell_size / (2.0 * 1.5);
             let ss = SpatialSubdivision2D::new(cell_size);
             let expected_result = CollisionCell {
                 offset: 0,
                 num_objects: 2,
             };
             let bboxes = vec![
-                cgmath::Vector4::new(-0.99, 0.99, 0.01, 0.01),
-                cgmath::Vector4::new(-0.925, 0.925, 0.1, 0.1),
+                cgmath::Vector3::new(-0.95, 0.95, radius),
+                cgmath::Vector3::new(-0.89, 0.89, radius),
             ];
             let invalid_cell_id = u32::MAX;
             let mut cell_id_array: Vec<u32> = vec![invalid_cell_id;   bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
@@ -940,6 +1056,7 @@ mod tests {
         #[test]
         fn test_create_collision_cell_list_two_collisions_different_home_cells(){
             let cell_size = 0.1;
+            let radius = cell_size / (2.0 * 1.5);
             let ss = SpatialSubdivision2D::new(cell_size);
             let expected_result_pass_0 = CollisionCell {
                 offset: 0,
@@ -950,9 +1067,9 @@ mod tests {
                 num_objects: 2,
             };
             let bboxes = vec![
-                cgmath::Vector4::new(-0.99, 0.99, 0.01, 0.01),
-                cgmath::Vector4::new(-0.925, 0.925, 0.1, 0.1),
-                cgmath::Vector4::new(-0.88, 0.98, 0.01, 0.01),
+                cgmath::Vector3::new(-0.95, 0.95, radius),
+                cgmath::Vector3::new(-0.89, 0.89, radius),
+                cgmath::Vector3::new(-0.85, 0.95, radius),
             ];
             let invalid_cell_id = u32::MAX;
             let mut cell_id_array: Vec<u32> = vec![invalid_cell_id;   bboxes.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
@@ -977,6 +1094,7 @@ mod tests {
         #[test]
         fn test_create_collision_cell_list_pass_2_different_sectors(){
             let cell_size = 0.1;
+            let radius = cell_size / (2.0 * 1.5);
             let ss = SpatialSubdivision2D::new(cell_size);
             let expected_result_1 = CollisionCell {
                 offset: 0,
@@ -987,10 +1105,10 @@ mod tests {
                 num_objects: 2,
             };
             let bboxes = vec![
-                cgmath::Vector4::new(-0.99, 0.89, 0.01, 0.01),
-                cgmath::Vector4::new(-0.94, 0.84, 0.01, 0.01),
-                cgmath::Vector4::new(-0.99, 0.69, 0.01, 0.01),
-                cgmath::Vector4::new(-0.94, 0.64, 0.01, 0.01),
+                cgmath::Vector3::new(-0.95, 0.85, radius),
+                cgmath::Vector3::new(-0.95, 0.85, radius),
+                cgmath::Vector3::new(-0.95, 0.65, radius),
+                cgmath::Vector3::new(-0.95, 0.65, radius),
 
             ];
             let invalid_cell_id = u32::MAX;
