@@ -6,7 +6,8 @@ use rand::Rng;
 
 use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle, };
 
-// use super::spatial_subdivision::SpatialSubdivision2D;
+use super::spatial_subdivision::SpatialSubdivision2D;
+
 
 const MAX_INSTANCES: usize = 10000;
 
@@ -41,12 +42,19 @@ const BOTTOM_RIGHT: Vector3<f32> = Vector3::new(1.0, -1.0, 0.0);
 
 impl CollisionSimulation {
     pub fn new() -> Self{
-        let radius = 0.01;
-        let num_instances: u32 = 1000;
+        let radius = 0.1;
+        let num_instances: u32 = 2;
                 
-        let positions = CollisionSimulation::generate_initial_positions(num_instances, radius);
+        // let positions = CollisionSimulation::generate_initial_positions(num_instances, radius);
+        let mut positions = [Vector3::new(0.0, 0.0, 0.0); MAX_INSTANCES];
+        positions[0] = Vector3::new(-0.5, 0.0, 0.0);
+        positions[1] = Vector3::new(0.5, 0.0, 0.0);
+        
+        // let velocities = CollisionSimulation::generate_random_velocities();
+        let mut velocities = [Vector3::new(0.00, 0.0, 0.0); MAX_INSTANCES];
+        velocities[0] = Vector3::new(0.01, 0.0, 0.0);
+        velocities[1] = Vector3::new(-0.01, 0.0, 0.0);
         let colors = CollisionSimulation::genrate_random_colors();
-        let velocities = CollisionSimulation::generate_random_velocities();
         let mass = [1.0; MAX_INSTANCES];
         let vertices = Circle::compute_vertices([0.0, 0.0, 0.0], radius);
         let indices = Circle::compute_indices();
@@ -103,61 +111,61 @@ impl CollisionSimulation {
 
     pub fn update(&mut self) {
         // Define bounding spheres and the grid cell size
-        // let mut bounding_spheres = Vec::new();
-        // let mut max_bounding_radius = 0.0;
-        // for i in 0..self.num_instances as usize {
-        //     let bounding_sphere = CollisionSimulation::create_bounding_sphere(self.positions[i], self.velocities[i], self.radius);
-        //     let radius = bounding_sphere[2];
+        let mut bounding_spheres = Vec::new();
+        let mut max_bounding_radius = 0.0;
+        for i in 0..self.num_instances as usize {
+            let bounding_sphere = CollisionSimulation::create_bounding_sphere(self.positions[i], self.velocities[i], self.radius);
+            let radius = bounding_sphere[2];
             
-        //     if radius > max_bounding_radius {
-        //         max_bounding_radius = radius;
-        //     }
-        //     bounding_spheres.push(bounding_sphere);
-        // }
-        // let cell_size = max_bounding_radius 2.0 * * 1.5;
-        // let ss = SpatialSubdivision2D::new(cell_size);
-        // ss.run(&mut self.positions, &mut self.velocities, self.num_instances as usize,
-        //     CollisionSimulation::continous_circle_circle_collision_detection,
-        //     CollisionSimulation::circle_circle_collision_response,
-        //     self.radius, &self.mass );
+            if radius > max_bounding_radius {
+                max_bounding_radius = radius;
+            }
+            bounding_spheres.push(bounding_sphere);
+        }
+        let cell_size = max_bounding_radius * 2.0 * 1.5;
+        let ss = SpatialSubdivision2D::new(cell_size);
+        ss.run(&mut self.positions, &mut self.velocities,
+            CollisionSimulation::continous_circle_circle_collision_detection,
+            CollisionSimulation::circle_circle_collision_response,
+            self.radius, &self.mass, &bounding_spheres);
 
         
         for i in 0..self.num_instances as usize {
             let pos = self.positions[i];
             let new_pos = pos + self.velocities[i];            
-            for j in i..self.num_instances as usize {
-                if i == j {
-                    continue;
-                }
+            // for j in i..self.num_instances as usize {
+            //     if i == j {
+            //         continue;
+            //     }
 
-                let pos_other = self.positions[j];
-                let new_pos_other = pos_other + self.velocities[j];
+            //     let pos_other = self.positions[j];
+            //     let new_pos_other = pos_other + self.velocities[j];
 
-                if !CollisionSimulation::aabb_collision_detection(
-                        pos, new_pos, self.positions[j], self.positions[j] + self.velocities[j], self.radius) {
-                    continue;
-                }
+            //     if !CollisionSimulation::aabb_collision_detection(
+            //             pos, new_pos, self.positions[j], self.positions[j] + self.velocities[j], self.radius) {
+            //         continue;
+            //     }
 
 
-                match CollisionSimulation::continous_circle_circle_collision_detection(
-                    pos, new_pos, self.radius, pos_other, new_pos_other, self.radius) {
-                    None => (), // No collision
-                    Some(t) if -1.0 <= t && t <= 1.0 => {
-                        let mut va = self.velocities[i].clone();
-                        let mut vb = self.velocities[j].clone();
-                        let mut pa = self.positions[i].clone();
-                        let mut pb = self.positions[j].clone();
+            //     match CollisionSimulation::continous_circle_circle_collision_detection(
+            //         pos, new_pos, self.radius, pos_other, new_pos_other, self.radius) {
+            //         None => (), // No collision
+            //         Some(t) if -1.0 <= t && t <= 1.0 => {
+            //             let mut va = self.velocities[i].clone();
+            //             let mut vb = self.velocities[j].clone();
+            //             let mut pa = self.positions[i].clone();
+            //             let mut pb = self.positions[j].clone();
                         
-                        CollisionSimulation::circle_circle_collision_response(
-                            t, &mut va, &mut vb, &mut pa, &mut pb,
-                            self.mass[i], self.mass[j]);
+            //             CollisionSimulation::circle_circle_collision_response(
+            //                 t, &mut va, &mut vb, &mut pa, &mut pb,
+            //                 self.mass[i], self.mass[j]);
 
-                        self.velocities[i] = va;
-                        self.velocities[j] = vb;
-                    },                    
-                    _ => (),
-                }
-            }
+            //             self.velocities[i] = va;
+            //             self.velocities[j] = vb;
+            //         },                    
+            //         _ => (),
+            //     }
+            // }
 
 
             match CollisionSimulation::vertical_boundary_collision(pos, new_pos, self.velocities[i], self.radius) {
