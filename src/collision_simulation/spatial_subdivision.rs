@@ -25,13 +25,13 @@ const PHANTOM_CELL_TYPE_4: u8 = 0b1000;
 const SPATIAL_SUBDIVISION_2D_CELL_OFFSET: usize = 4;
 
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Object {
     id: u32,
     control_bits: u8,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct CollisionCell {
     offset: usize,
     num_objects: u32,
@@ -228,6 +228,8 @@ impl SpatialSubdivision2D {
 
     fn sort_arrays(cell_id_array: &mut Vec<u32>, object_id_array: &mut Vec<Object>) {
         // FIXME: This is a naive implementation. We should use a more efficient sorting algorithm
+        // FIXME: If two objects are in the same cell, the one that has the cell as home cell should
+        //        be first in the list.
         let mut zipped: Vec<(_, _)> = cell_id_array.iter().cloned().zip(object_id_array.iter().cloned()).collect();
         zipped.sort_by(|a, b| a.0.cmp(&b.0));
         let (sorted_cell_id_array, sorted_object_id_array): (Vec<_>, Vec<_>) = zipped.into_iter().unzip();
@@ -263,38 +265,37 @@ impl SpatialSubdivision2D {
         let mut pass3: Vec<CollisionCell> = Vec::new();
 
         let mut offset = 0;
-        let mut last_processed_id = usize::MAX;
-        for id in cell_id_array {
+        let mut last_processed_cell_id = u32::MAX;
+        for cell_id in cell_id_array {
             // Early stoping as all empy cells are at the end of the array
-            if id == &u32::MAX {
+            if cell_id == &u32::MAX {
                 break;
             }
-            let index = *id as usize;
-            if index == last_processed_id {
+            if cell_id == &last_processed_cell_id {
                 offset += 1;
                 continue;
             }
-            last_processed_id = index.clone();
+            last_processed_cell_id = (*cell_id).clone();
 
+            let num_objects_in_cell =  objects_per_cell[*cell_id as usize];
             // No objects in this cell
-            if objects_per_cell[index] == 0 {
+            if num_objects_in_cell == 0 {
                 continue;
             }
 
             // No collision will happen in this cell as there only is one item
-            if objects_per_cell[index] == 1 {
+            if num_objects_in_cell == 1 {
                 offset += 1;
                 continue;
             }
 
             // Collision will happen in this cell
-            let num_objects_in_current_cell = objects_per_cell[index];
             let collision = CollisionCell {
                 offset: offset.clone() as usize,
-                num_objects: num_objects_in_current_cell,
+                num_objects: num_objects_in_cell,
             };
            
-            let cell_type = self.cell_id_to_cell_type(index as u32);
+            let cell_type = self.cell_id_to_cell_type(*cell_id);
             match cell_type {
                 0 => pass0.push(collision),
                 1 => pass1.push(collision),
@@ -690,7 +691,7 @@ mod tests {
         #[test]
         fn test_cell_id_to_cell_type_real_scenario_1() {
             let cell_size = 0.44547725;
-            let num_cells = 5;
+            // let num_cells = 5;
             let ss = SpatialSubdivision2D::new(cell_size);
 
             let mut cell_id = 0;
@@ -869,7 +870,7 @@ mod tests {
         fn test_construct_arrays_live_scenario_1() {
             // radius = 0.1 and velocity = 0.01
             let cell_size = 0.44547725;
-            let num_cells = 5;
+            // let num_cells = 5;
             let ss = SpatialSubdivision2D::new(cell_size);
             let bboxes = vec![
                 cgmath::Vector3::new(-0.24500024, 0.0, 0.14849241),
@@ -884,12 +885,18 @@ mod tests {
             let expected_cell_id_array = vec![11,6,12, u32::MAX, 12,7,13, u32::MAX];
             assert_eq!(expected_cell_id_array, cell_id_array);
 
-            println!("Cell ID Array: {:?}", cell_id_array);
-            println!("Object ID Array: {:?}", object_id_array);
-            println!("");
+            let expected_object_invalid = Object{id: u32::MAX, control_bits: 0};
+            let expected_object_0 = Object{id: 0, control_bits: 0b011011};
+            let expected_object_1 = Object{id: 1, control_bits: 0b000111};
 
-            // TODO: First fix test_cell_id_to_cell_type_real_scenario_1
-            assert!(false);
+            assert_eq!(expected_object_0, object_id_array[0]);
+            assert_eq!(expected_object_0, object_id_array[1]);
+            assert_eq!(expected_object_0, object_id_array[2]);
+            assert_eq!(expected_object_invalid, object_id_array[3]);
+            assert_eq!(expected_object_1, object_id_array[4]);
+            assert_eq!(expected_object_1, object_id_array[5]);
+            assert_eq!(expected_object_1, object_id_array[6]);
+            assert_eq!(expected_object_invalid, object_id_array[7]);            
         }
 
     }
@@ -923,6 +930,28 @@ mod tests {
 
             assert_eq!(cell_id_array, expected_cell_id_array); 
             assert_eq!(object_ids, expeced_object_id_array);
+        }
+
+        #[test]
+        fn test_sort_arrays_line_scenario_1() {
+            let mut cell_id_array = vec![11,6,12, u32::MAX, 12,7,13, u32::MAX];
+            let mut object_id_array = vec! [
+                Object { id: 0, control_bits: 0b011011 }, Object { id: 0, control_bits: 0b011011 },
+                Object { id: 0, control_bits: 0b011011 }, Object { id: u32::MAX, control_bits: 0 },
+                Object { id: 1, control_bits: 0b000111 }, Object { id: 1, control_bits: 0b000111 },
+                Object { id: 1, control_bits: 0b000111 }, Object { id: u32::MAX, control_bits: 0 }];
+
+            let expected_cell_id_array = vec![6, 7, 11, 12, 12, 13, u32::MAX, u32::MAX];
+            let expected_object_id_array = vec![
+                Object { id: 0, control_bits: 0b011011 }, Object { id: 1, control_bits: 0b000111 },
+                Object { id: 0, control_bits: 0b011011 }, Object { id: 0, control_bits: 0b011011 },
+                Object { id: 1, control_bits: 0b000111 }, Object { id: 1, control_bits: 0b000111 },
+                Object { id: u32::MAX, control_bits: 0 }, Object { id: u32::MAX, control_bits: 0 }];
+
+            SpatialSubdivision2D::sort_arrays(&mut cell_id_array, &mut object_id_array);
+
+            assert_eq!(cell_id_array, expected_cell_id_array);
+            assert_eq!(object_id_array, expected_object_id_array);
         }
     }
 
@@ -1242,38 +1271,31 @@ mod tests {
             assert!(pass3.is_empty());
         }
 
-        // #[test]
-        // fn test_create_collision_cell_list_temp() {
-        //     let cell_id_array = vec![6, 7, 11, 12, 12, 13, u32::MAX, u32::MAX];
-        //     let object_id_array =  vec![
-        //         Object { id: 0, control_bits: 23 }, Object { id: 1, control_bits: 11 },
-        //         Object { id: 0, control_bits: 23 }, Object { id: 0, control_bits: 23 },
-        //         Object { id: 1, control_bits: 11 }, Object { id: 1, control_bits: 11 },
-        //         Object { id: u32::MAX, control_bits: 0 }, Object { id: u32::MAX, control_bits: 0 }];
+        #[test]
+        fn test_create_collision_cell_list_live_scenario_1() {
+            let cell_id_array = vec![6, 7, 11, 12, 12, 13, u32::MAX, u32::MAX];
+            let object_id_array =  vec![
+                Object { id: 0, control_bits: 23 }, Object { id: 1, control_bits: 11 },
+                Object { id: 0, control_bits: 23 }, Object { id: 0, control_bits: 23 },
+                Object { id: 1, control_bits: 11 }, Object { id: 1, control_bits: 11 },
+                Object { id: u32::MAX, control_bits: 0 }, Object { id: u32::MAX, control_bits: 0 }];
 
+            let cell_size = 0.44547725;
+            let ss = SpatialSubdivision2D::new(cell_size);
+            let (pass0, pass1, pass2, pass3) = ss.create_collision_cell_list(&cell_id_array);
 
+            // FIXME: Due to how the current sorting works, lower id object will remain first among objects in
+            // the same cell. The expected result is that the first (and possible more) object should have the 
+            // current cell as a home. This matter as the first object decides which pass the collision will
+            // be checked in. Once the sorting is fixed, the below collision will happen in pass 1.
+            let expected_pass_0 = vec![CollisionCell { offset: 3, num_objects: 2}];
+            // let expected_pass_1 = vec![CollisionCell { offset: 3, num_objects: 2}];
 
-
-
-
-        //     let cell_id_original = vec![11, 6, 12, u32::MAX, 12, 7, 13, u32::MAX];
-        //     let object_id_original = vec! [
-        //         Object { id: 0, control_bits: 23 }, Object { id: 0, control_bits: 23 },
-        //         Object { id: 0, control_bits: 23 }, Object { id: u32::MAX, control_bits: 0 },
-        //         Object { id: 1, control_bits: 11 }, Object { id: 1, control_bits: 11 },
-        //         Object { id: 1, control_bits: 11 }, Object { id: u32::MAX, control_bits: 0 }];
-
-        //     // Step 1: Is this scenario valid?
-
-        //     let cell_size = 0.44547725;
-        //     let ss = SpatialSubdivision2D::new(cell_size);
-        //     let (pass0, pass1, pass2, pass3) = ss.create_collision_cell_list(&cell_id_array);
-
-        //     // Pass 0 [CollisionCell { offset: 3, num_objects: 2 }]
-        //     println!("{:?}", pass0);
-
-        //     assert!(false);
-        // }
+            assert_eq!(pass0, expected_pass_0);
+            // assert_eq!(pass1, expected_pass_1);
+            assert!(pass2.is_empty());
+            assert!(pass3.is_empty());
+        }
     }
 
     mod test_collision_check {
