@@ -752,4 +752,45 @@ mod tests {
         assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res);        
     }
 
+    mod test_create_bounding_sphere {
+        use cgmath::Vector3;
+        use super::super::CollisionSimulation;
+
+        #[test]
+        fn create_bounding_sphere_no_velocity() {
+            let radius = 0.1;
+            let pos = Vector3::new(0.0, 0.0, 0.0);
+            let velocity = Vector3::new(0.0, 0.0, 0.0);
+            
+            let expected_result = Vector3::new(0.0, 0.0, radius*f32::sqrt(2.0));
+            let res = CollisionSimulation::create_bounding_sphere(pos, velocity, radius);
+
+            assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res);
+        }
+
+        #[test]
+        fn create_bounding_sphere_with_velocity() {
+            let radius = 0.1;
+            let pos = Vector3::new(0.0, 0.0, 0.0);
+            let velocity = Vector3::new(0.2, 0.0, 0.0);
+            
+            let expected_result = Vector3::new(0.1, 0.0, 0.2*f32::sqrt(2.0));
+            let res = CollisionSimulation::create_bounding_sphere(pos, velocity, radius);
+
+            assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res);
+        }
+
+        #[test]
+        fn create_bounding_sphere_with_negative_velocity() {
+            let radius = 0.1;
+            let pos = Vector3::new(0.0, 0.0, 0.0);
+            let velocity = Vector3::new(-0.2, 0.0, 0.0);
+            
+            let expected_result = Vector3::new(-0.1, 0.0, 0.2*f32::sqrt(2.0));
+            let res = CollisionSimulation::create_bounding_sphere(pos, velocity, radius);
+
+            assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res);
+        }
+    }
+
 }
