@@ -43,17 +43,18 @@ const BOTTOM_RIGHT: Vector3<f32> = Vector3::new(1.0, -1.0, 0.0);
 impl CollisionSimulation {
     pub fn new() -> Self{
         let radius = 0.1;
-        let num_instances: u32 = 2;
+        let num_instances: u32 = 10;
                 
-        // let positions = CollisionSimulation::generate_initial_positions(num_instances, radius);
-        let mut positions = [Vector3::new(0.0, 0.0, 0.0); MAX_INSTANCES];
-        positions[0] = Vector3::new(-0.5, 0.0, 0.0);
-        positions[1] = Vector3::new(0.5, 0.0, 0.0);
+        let positions = CollisionSimulation::generate_initial_positions(num_instances, radius);
+        // let mut positions = [Vector3::new(0.0, 0.0, 0.0); MAX_INSTANCES];
+        // positions[0] = Vector3::new(-0.5, 0.0, 0.0);
+        // positions[1] = Vector3::new(0.5, 0.0, 0.0);
         
-        // let velocities = CollisionSimulation::generate_random_velocities();
-        let mut velocities = [Vector3::new(0.00, 0.0, 0.0); MAX_INSTANCES];
-        velocities[0] = Vector3::new(0.01, 0.0, 0.0);
-        velocities[1] = Vector3::new(-0.01, 0.0, 0.0);
+        let velocities = CollisionSimulation::generate_random_velocities();
+        // let mut velocities = [Vector3::new(0.0, 0.0, 0.0); MAX_INSTANCES];
+        // velocities[0] = Vector3::new(0.01, 0.0, 0.0);
+        // velocities[1] = Vector3::new(-0.01, 0.0, 0.0);
+
         let colors = CollisionSimulation::genrate_random_colors();
         let mass = [1.0; MAX_INSTANCES];
         let vertices = Circle::compute_vertices([0.0, 0.0, 0.0], radius);
@@ -122,6 +123,10 @@ impl CollisionSimulation {
             }
             bounding_spheres.push(bounding_sphere);
         }
+
+        let original_positions = self.positions.clone();
+        let original_velocities = self.velocities.clone();
+
         let cell_size = max_bounding_radius * 2.0 * 1.5;
         let ss = SpatialSubdivision2D::new(cell_size);
         ss.run(&mut self.positions, &mut self.velocities,
@@ -184,6 +189,38 @@ impl CollisionSimulation {
 
             self.positions[i] += self.velocities[i];
 
+        }
+
+        // DEBUG: Check if any circles overlap
+        for i in 0..self.num_instances as usize {
+            for j in i..self.num_instances as usize {
+                if i == j {
+                    continue;
+                }
+
+                let pos = self.positions[i];
+                let pos_other = self.positions[j];
+                let distance = pos.distance2(pos_other);
+                // Square because distance2() returns squared
+                let allowed_overlap = 0.0;
+                if distance < (self.radius + self.radius).powi(2) - allowed_overlap {
+                    println!("");
+                    println!("Circles overlap: {} and {}", i, j);
+                    println!("Radius: {}", self.radius);
+                    println!("Allowed overlap: {}", allowed_overlap);
+                    println!("Overlap depth: {}", f32::sqrt(distance) - self.radius - self.radius);
+                    println!("Positions: [{:?}, {:?}]", original_positions[i], original_positions[j]);
+                    println!("New positions: [{:?}, {:?}]", self.positions[i], self.positions[j]);
+                    println!("Velocities: [{:?}, {:?}]", original_velocities[i], original_velocities[j]);
+                    println!("New velocities: [{:?}, {:?}]", self.velocities[i], self.velocities[j]);
+                    println!("Max velocity: {}", self.velocities.iter().map(|v| v.magnitude()).fold(0.0, f32::max));
+                    println!("Bounding spheres: [{:?}, {:?}]", bounding_spheres[i], bounding_spheres[j]);
+                    println!("");
+                    panic!("Circles overlap!");
+                    // TODO: Check if the previous position was overlapping to determine if it is an issue
+                    //          with the collision detection or the spatial subdivsion.
+                }
+            }
         }
     }
 
