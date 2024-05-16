@@ -1,5 +1,4 @@
 use core::panic;
-
 use cgmath::{InnerSpace, Vector2, Vector3};
 
 /* 
@@ -9,21 +8,15 @@ Cell ID layout:
 |3|4|5|
 |6|7|8|
 -------
+
+Cell type layout:
+-------
+|0|1|0|
+|2|3|2|
+|0|1|0|
 */
 
-// const HOME_CELL_TYPE_0: u8 = 0b00;
-// const HOME_CELL_TYPE_1: u8 = 0b01;
-// const HOME_CELL_TYPE_2: u8 = 0b10;
-// const HOME_CELL_TYPE_3: u8 = 0b11;
-// const HOME_CELL_TYPES: [u8; 4] = [HOME_CELL_TYPE_1, HOME_CELL_TYPE_2, HOME_CELL_TYPE_3, HOME_CELL_TYPE_4];
-
-// const PHANTOM_CELL_TYPE_0: u8 = 0b0001;
-// const PHANTOM_CELL_TYPE_1: u8 = 0b0010;
-// const PHANTOM_CELL_TYPE_2: u8 = 0b0100;
-// const PHANTOM_CELL_TYPE_3: u8 = 0b1000;
-
 const SPATIAL_SUBDIVISION_2D_CELL_OFFSET: usize = 4;
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Object {
@@ -35,8 +28,6 @@ struct Object {
 struct CollisionCell {
     offset: usize,
     num_objects: u32,
-    // num_home_ids: u32,
-    // num_phantom_ids: u32,
 }
 
 pub struct SpatialSubdivision2D {
@@ -185,7 +176,7 @@ impl SpatialSubdivision2D {
         }
     }
 
-    fn compute_home_cell_id(&self, bounding_sphere: Vector3<f32>) -> u32 {
+    fn _compute_home_cell_id(&self, bounding_sphere: Vector3<f32>) -> u32 {
         let center_x = bounding_sphere.x + (bounding_sphere.z / 2.0);
         let center_y = bounding_sphere.y - (bounding_sphere.z / 2.0);
         return self.point_to_cell_id(Vector2::new(center_x, center_y));
@@ -200,20 +191,12 @@ impl SpatialSubdivision2D {
             
             let phantom_cell_ids = self.compute_phantom_cell_ids(bbox_offset, self.cell_size, self.num_cells);
             let home_cell_id = phantom_cell_ids[0];
-
-            // println!("ID: {}, Home cell id: {:?}", i, home_cell_id);
-            // println!("Num cells: {}, Cell size: {}", self.num_cells, self.cell_size);
-            // println!("Phantom cell ids: {:?}", phantom_cell_ids);
             
             let mut phantom_cell_bits: u8 = 0;
             for cell_id in phantom_cell_ids.iter() {
-                // println!("Cell id: {:?}, Cell type: {}", cell_id, SpatialSubdivision2D::cell_id_to_cell_type(cell_id.clone(), self.num_cells));
                 phantom_cell_bits |= 1 << SpatialSubdivision2D::cell_id_to_cell_type(cell_id.clone(), self.num_cells);
             }
-            
-            // println!("Phantom cell bits: {:b}", phantom_cell_bits);
-            // println!("");
-            
+                        
             let home_cell_type = SpatialSubdivision2D::cell_id_to_cell_type(home_cell_id, self.num_cells);
             let object = Object {
                 id: i as u32,
@@ -343,17 +326,27 @@ impl SpatialSubdivision2D {
     /// 
     /// Returns true if the detailed collision check can be skipped.
     fn skip_detailed_collision_check(a: &Object, b: &Object, pass_num: u8) -> bool {
-        let home_cell_type_a = a.control_bits >> 4;
-        let home_cell_type_b = b.control_bits >> 4;
-        let less_than_pass_num = home_cell_type_a < pass_num || home_cell_type_b < pass_num;
-        
         let common_cell_types = a.control_bits & b.control_bits & 0b00001111;
+
+        let home_cell_type_a = a.control_bits >> 4;
         let home_cell_type_bit_flag_a = 1 << home_cell_type_a;
+        let object_a_less_than_pass_num = home_cell_type_a < pass_num;
+        let object_a_home_cell_type_among_common_cell_types = home_cell_type_bit_flag_a & common_cell_types > 0;
+
+        if object_a_less_than_pass_num && object_a_home_cell_type_among_common_cell_types {
+            return true;
+        }
+        
+        let home_cell_type_b = b.control_bits >> 4;
         let home_cell_type_bit_flag_b = 1 << home_cell_type_b;
-        let home_cell_among_commong_cell_types = 
-                home_cell_type_bit_flag_a & common_cell_types > 0 ||
-                home_cell_type_bit_flag_b & common_cell_types > 0;
-        return less_than_pass_num && home_cell_among_commong_cell_types;
+        let object_b_less_than_pass_num = home_cell_type_b < pass_num;
+        let object_b_home_cell_type_among_common_cell_types = home_cell_type_bit_flag_b & common_cell_types > 0;
+
+        if object_b_less_than_pass_num && object_b_home_cell_type_among_common_cell_types {
+            return true;
+        }
+
+        return false;
     }
 
     fn run_pass(
@@ -382,10 +375,8 @@ impl SpatialSubdivision2D {
                     let b = object_id_array[offset + j as usize];
                 
                     if SpatialSubdivision2D::skip_detailed_collision_check(&a, &b, pass_num) {
-                        // println!("Skipping detailed collision check");
                         continue;
                     }
-                    // println!("## Detailed collision check");
                     match collision_check_fn(pos_a, new_pos_a, radius, pos_b, new_pos_b, radius) {
                         Some(ttc) if -1.0 <= ttc && ttc <= 1.0  => {
                             let mut va = velocities[a.id as usize].clone();
@@ -429,7 +420,6 @@ impl SpatialSubdivision2D {
             mass: &[f32; 10000],
             bounding_spheres: &Vec<Vector3<f32>>,
         ){
-
         
         let num_of_bounding_sphere = bounding_spheres.len();
         let invalid_cell_id = u32::MAX;
@@ -437,48 +427,23 @@ impl SpatialSubdivision2D {
         let mut object_id_array: Vec<Object> = vec![Object{id: invalid_cell_id, control_bits: 0}.clone(); num_of_bounding_sphere * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
 
         self.construct_arrays(&bounding_spheres, &mut cell_id_array, &mut object_id_array);
-        
-        // let cell_id_array_original = cell_id_array.clone();
-        // let object_id_array_original = object_id_array.clone();
-        
+
         // Sort the arrays according to the cell id
         SpatialSubdivision2D::sort_arrays(&mut cell_id_array, &mut object_id_array, self.num_cells);
-        // Create the collision cell list
         let (pass0, pass1, pass2, pass3) = self.create_collision_cell_list(&cell_id_array);
 
         if pass0.len() != 0 {
-            // println!("Pass 0 {:?}", pass0);
             SpatialSubdivision2D::run_pass(0,&pass0, &object_id_array, positions, velocities, mass, collision_check_fn, collision_response_fn, radius);
         }
 
         if pass1.len() != 0 {
-            // println!("Pass 1 {:?}", pass1);
             SpatialSubdivision2D::run_pass(1,&pass1, &object_id_array, positions, velocities, mass, collision_check_fn, collision_response_fn, radius);
         }
 
-        if pass0.len() != 0 && pass0[0].offset == 4 {
-            // println!("");
-            // println!("Cell ID Array: {:?}", cell_id_array);
-            // println!("Object ID Array: {:?}", object_id_array);
-            // println!("num cells: {:?}", self.num_cells);
-            // println!("cell_size: {:?}", self.cell_size);
-            // println!("Cell ID Array Original: {:?}", cell_id_array_original);
-            // println!("Bounding speheres 0: {:?}", bounding_spheres[0]);
-            // println!("Bounding speheres 1: {:?}", bounding_spheres[1]);
-            // println!("Object ID Array Original: {:?}", object_id_array_original);
-            // println!("Position 0: {:?}", positions[0]);
-            // println!("Position 1: {:?}", positions[1]);
-
-            // panic!("Stop");
-        }
-
-
         if pass2.len() != 0 {
-            // println!("Pass 2 {:?}", pass2);
             SpatialSubdivision2D::run_pass(2,&pass2, &object_id_array, positions, velocities, mass, collision_check_fn, collision_response_fn, radius);
         }
         if pass3.len() != 0 {
-            // println!("Pass 3 {:?}", pass3);
             SpatialSubdivision2D::run_pass(3, &pass3, &object_id_array, positions, velocities, mass, collision_check_fn, collision_response_fn, radius);
         }
     }
@@ -518,11 +483,34 @@ mod tests {
             assert_eq!(ss.point_to_cell_id(point), 19);
         }
         #[test]
-        fn test_point_to_cell_id_border_to_right() {
+        fn test_point_to_cell_id_right_of_border() {
             let cell_size = 0.1;
             let ss = SpatialSubdivision2D::new(cell_size);
             let point = cgmath::Vector2::new(0.1, 2.0);
             assert_eq!(ss.point_to_cell_id(point), 1);
+        }
+        #[test]
+        fn test_point_to_cell_id_left_of_border() {
+            let cell_size = 0.1;
+            let ss = SpatialSubdivision2D::new(cell_size);
+            let point = cgmath::Vector2::new(0.09999, 2.0);
+            assert_eq!(ss.point_to_cell_id(point), 0);
+        }
+
+        #[test]
+        fn test_point_to_cell_id_top_of_border() {
+            let cell_size = 0.1;
+            let ss = SpatialSubdivision2D::new(cell_size);
+            let point = cgmath::Vector2::new(0.0, 1.90001);
+            assert_eq!(ss.point_to_cell_id(point), 0);
+        }
+
+        #[test]
+        fn test_point_to_cell_id_bottom_of_border() {
+            let cell_size = 0.1;
+            let ss = SpatialSubdivision2D::new(cell_size);
+            let point = cgmath::Vector2::new(0.0, 1.8999);
+            assert_eq!(ss.point_to_cell_id(point), 20);
         }
     
         #[test]
@@ -560,9 +548,7 @@ mod tests {
 
     mod test_compute_phantom_cell_ids {
         use std::vec;
-
         use cgmath::num_traits::Float;
-
         use super::super::SpatialSubdivision2D;
 
         #[test]
@@ -680,8 +666,6 @@ mod tests {
     }
 
     mod test_cell_id_to_cell_type {
-        use core::num;
-
         use super::super::SpatialSubdivision2D;
 
         #[test]
@@ -1109,8 +1093,6 @@ mod tests {
     }
 
     mod test_create_collision_cell_list {
-        use cgmath::Vector3;
-
         use crate::collision_simulation::spatial_subdivision::{CollisionCell, Object, SpatialSubdivision2D, SPATIAL_SUBDIVISION_2D_CELL_OFFSET};
 
         #[test]
@@ -1453,7 +1435,7 @@ mod tests {
     }
 
     mod test_full {
-        use core::num;
+        
 
         use cgmath::Vector3;
 
@@ -1467,11 +1449,11 @@ mod tests {
 
             let bounding_spheres = vec!(Vector3::new(0.42664176, 0.40857708, 0.14619982), Vector3::new(0.50925887, 0.55335414, 0.14969368));
             let num_of_bounding_sphere = bounding_spheres.len();
-            let positions =    vec!(Vector3::new(0.4240127, 0.40645462, 0.0), Vector3::new(0.5149141, 0.55484885, 0.0));
-            let new_positions =    vec!(Vector3::new(0.42927086, 0.41069952, 0.0), Vector3::new(0.5036037, 0.5518595, 0.0));
+            let _positions =    vec!(Vector3::new(0.4240127, 0.40645462, 0.0), Vector3::new(0.5149141, 0.55484885, 0.0));
+            let _new_positions =    vec!(Vector3::new(0.42927086, 0.41069952, 0.0), Vector3::new(0.5036037, 0.5518595, 0.0));
             
-            let velocities =       vec!(Vector3::new(0.005258184, 0.0042448994, 0.0), Vector3::new(-0.011310411, -0.0029893694, 0.0));
-            let new_velocities =       vec!(Vector3::new(0.005258184, 0.0042448994, 0.0), Vector3::new(-0.011310411, -0.0029893694, 0.0));
+            let _velocities =       vec!(Vector3::new(0.005258184, 0.0042448994, 0.0), Vector3::new(-0.011310411, -0.0029893694, 0.0));
+            let _new_velocities =       vec!(Vector3::new(0.005258184, 0.0042448994, 0.0), Vector3::new(-0.011310411, -0.0029893694, 0.0));
 
             let expected_phantom_cells_0 = vec!(8,7);
             let expected_phantom_cells_1 = vec!(8,3);
@@ -1517,6 +1499,64 @@ mod tests {
             assert!(pass2.is_empty());
             assert_eq!(pass3, expected_pass_3);
         }
+
+        #[test]
+        fn test_full_live_scenario_4(){
+            let cell_size = 0.44547725;
+            let ss = SpatialSubdivision2D::new(cell_size);
+            let bounding_spheres = vec![
+                cgmath::Vector3::new(-0.02122597, 0.08115901, 0.14885814),
+                cgmath::Vector3::new(-0.055799574, 0.26585513, 0.14463444),
+            ];
+
+            let invalid_cell_id = u32::MAX;
+            let mut cell_id_array: Vec<u32> = vec![invalid_cell_id; bounding_spheres.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
+            let mut object_id_array: Vec<Object> = vec![Object{id: invalid_cell_id, control_bits: 0}.clone(); bounding_spheres.len() * SPATIAL_SUBDIVISION_2D_CELL_OFFSET as usize];
+            
+            let object_a = Object{id: 0, control_bits: 0b001111};
+            let object_b = Object{id: 1, control_bits: 0b101100};
+            let expected_object_invalid = Object{id: u32::MAX, control_bits: 0};
+            let expected_object_id_array = vec![
+                object_a.clone(), object_a.clone(), object_a.clone(), object_a.clone(),
+                object_b.clone(), object_b.clone(), expected_object_invalid.clone(), expected_object_invalid.clone()];
+            let expected_cell_id_array = vec![12,6,7,11,7,6,u32::MAX,u32::MAX];
+            
+            ss.construct_arrays(&bounding_spheres, &mut cell_id_array, &mut object_id_array);
+
+            assert_eq!(expected_cell_id_array, cell_id_array);
+            assert_eq!(expected_object_id_array, object_id_array);
+
+            let expected_sorted_cell_id_array = vec![6, 6, 7, 7, 11, 12, u32::MAX, u32::MAX];
+            let expected_sorted_object_id_array = vec![
+                object_a.clone(), object_b.clone(), object_b.clone(), object_a.clone(),
+                object_a.clone(), object_a.clone(), expected_object_invalid.clone(), expected_object_invalid.clone()];
+
+            SpatialSubdivision2D::sort_arrays(&mut cell_id_array, &mut object_id_array, ss.num_cells);
+
+            assert_eq!(expected_sorted_cell_id_array, cell_id_array);
+            assert_eq!(expected_sorted_object_id_array, object_id_array);
+
+            let expected_pass_2 = vec![CollisionCell { offset: 2, num_objects: 2 }];
+            let expected_pass_3 = vec![CollisionCell { offset: 0, num_objects: 2 }];
+
+            let passes = ss.create_collision_cell_list(&cell_id_array);
+            let (pass0, pass1, pass2, pass3) = passes;
+
+            assert!(pass0.is_empty());
+            assert!(pass1.is_empty());
+            assert_eq!(pass2, expected_pass_2);
+            assert_eq!(pass3, expected_pass_3);
+
+            let pass2_object_a = object_id_array[2];
+            let pass2_object_b = object_id_array[3];
+            let should_skip_pass_2 = SpatialSubdivision2D::skip_detailed_collision_check(&pass2_object_a, &pass2_object_b, 2);
+            assert_eq!(should_skip_pass_2, false);
+
+            let pass3_object_a = object_id_array[0];
+            let pass3_object_b = object_id_array[1];
+            let should_skip_pass_3 = SpatialSubdivision2D::skip_detailed_collision_check(&pass3_object_a, &pass3_object_b, 3);
+            assert_eq!(should_skip_pass_3, true);
+      }
     }
 
     mod test_collision_check {

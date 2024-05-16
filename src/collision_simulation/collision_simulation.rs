@@ -91,7 +91,7 @@ impl CollisionSimulation {
         *vb = new_velocity_j;
     }
 
-    fn create_bbox(pos: Vector3<f32>, vel: Vector3<f32>, radius: f32) -> Vector4<f32> {
+    fn _create_bbox(pos: Vector3<f32>, vel: Vector3<f32>, radius: f32) -> Vector4<f32> {
         let new_pos = pos + vel;
         let top_left_x = pos[0].min(new_pos[0]) - radius;
         let top_left_y = pos[1].max(new_pos[1]) + radius;
@@ -106,7 +106,7 @@ impl CollisionSimulation {
         let new_pos = pos + vel;
         let center = (pos + new_pos) / 2.0;
         let radius = (pos - center).magnitude();
-        let sphere_total_radius = (radius + r) * f32::sqrt(2.0);
+        let sphere_total_radius = (radius + r) * f32::sqrt(2.0); // Scale sphere as described
         Vector3::new(center[0], center[1], sphere_total_radius)
     }
 
@@ -124,8 +124,7 @@ impl CollisionSimulation {
             bounding_spheres.push(bounding_sphere);
         }
 
-        let original_positions = self.positions.clone();
-        let original_velocities = self.velocities.clone();
+
 
         let cell_size = max_bounding_radius * 2.0 * 1.5;
         let ss = SpatialSubdivision2D::new(cell_size);
@@ -138,40 +137,6 @@ impl CollisionSimulation {
         for i in 0..self.num_instances as usize {
             let pos = self.positions[i];
             let new_pos = pos + self.velocities[i];            
-            // for j in i..self.num_instances as usize {
-            //     if i == j {
-            //         continue;
-            //     }
-
-            //     let pos_other = self.positions[j];
-            //     let new_pos_other = pos_other + self.velocities[j];
-
-            //     if !CollisionSimulation::aabb_collision_detection(
-            //             pos, new_pos, self.positions[j], self.positions[j] + self.velocities[j], self.radius) {
-            //         continue;
-            //     }
-
-
-            //     match CollisionSimulation::continous_circle_circle_collision_detection(
-            //         pos, new_pos, self.radius, pos_other, new_pos_other, self.radius) {
-            //         None => (), // No collision
-            //         Some(t) if -1.0 <= t && t <= 1.0 => {
-            //             let mut va = self.velocities[i].clone();
-            //             let mut vb = self.velocities[j].clone();
-            //             let mut pa = self.positions[i].clone();
-            //             let mut pb = self.positions[j].clone();
-                        
-            //             CollisionSimulation::circle_circle_collision_response(
-            //                 t, &mut va, &mut vb, &mut pa, &mut pb,
-            //                 self.mass[i], self.mass[j]);
-
-            //             self.velocities[i] = va;
-            //             self.velocities[j] = vb;
-            //         },                    
-            //         _ => (),
-            //     }
-            // }
-
 
             match CollisionSimulation::vertical_boundary_collision(pos, new_pos, self.velocities[i], self.radius) {
                 None => (), // No collision
@@ -191,37 +156,7 @@ impl CollisionSimulation {
 
         }
 
-        // DEBUG: Check if any circles overlap
-        for i in 0..self.num_instances as usize {
-            for j in i..self.num_instances as usize {
-                if i == j {
-                    continue;
-                }
-
-                let pos = self.positions[i];
-                let pos_other = self.positions[j];
-                let distance = pos.distance2(pos_other);
-                // Square because distance2() returns squared
-                let allowed_overlap = 0.0;
-                if distance < (self.radius + self.radius).powi(2) - allowed_overlap {
-                    println!("");
-                    println!("Circles overlap: {} and {}", i, j);
-                    println!("Radius: {}", self.radius);
-                    println!("Allowed overlap: {}", allowed_overlap);
-                    println!("Overlap depth: {}", f32::sqrt(distance) - self.radius - self.radius);
-                    println!("Positions: [{:?}, {:?}]", original_positions[i], original_positions[j]);
-                    println!("New positions: [{:?}, {:?}]", self.positions[i], self.positions[j]);
-                    println!("Velocities: [{:?}, {:?}]", original_velocities[i], original_velocities[j]);
-                    println!("New velocities: [{:?}, {:?}]", self.velocities[i], self.velocities[j]);
-                    println!("Max velocity: {}", self.velocities.iter().map(|v| v.magnitude()).fold(0.0, f32::max));
-                    println!("Bounding spheres: [{:?}, {:?}]", bounding_spheres[i], bounding_spheres[j]);
-                    println!("");
-                    panic!("Circles overlap!");
-                    // TODO: Check if the previous position was overlapping to determine if it is an issue
-                    //          with the collision detection or the spatial subdivsion.
-                }
-            }
-        }
+        
     }
 
     /// Axis-aligned bounding box collision detection.
@@ -234,6 +169,7 @@ impl CollisionSimulation {
     /// To create a linear collision detection we use the start and end position of the
     /// objects and create a bounding bounding box. We then project the bounding box onto
     /// the axises and check if the projections overlap.
+    #[allow(dead_code)]
     fn aabb_collision_detection(
             pos: Vector3<f32>, new_pos: Vector3<f32>,
             pos_other: Vector3<f32>, new_pos_other: Vector3<f32>,
@@ -427,7 +363,6 @@ impl CollisionSimulation {
             None => return None, // No collision
             Some(collision_point) => {
                 // TODO: There are additional checks that can be done here to make sure there is a collision
-                
                 let distance1 = collision_point.distance2(new_position);
                 if distance1 < radius.powi(2) {
                     return Some(collision_point);
@@ -448,6 +383,7 @@ impl CollisionSimulation {
     /// Computes the intersection point of two lines.
     /// 
     /// Returns the intersection point if the lines intersect, otherwise None.
+    #[allow(non_snake_case)]
     fn line_line_intersect(A: [f32;3], B: [f32;3], C: [f32;3], D: [f32;3]) -> Option<Vector3<f32>>{
         let a1 = B[1] - A[1];
         let b1 = A[0] - B[0];
@@ -735,6 +671,41 @@ mod tests {
         let res = super::CollisionSimulation::continous_circle_circle_collision_detection(
             circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
         assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res.unwrap());
+    }
+
+    #[test]
+    fn test_continious_circle_collision_live_scenario_4() {
+        let radius = 0.1;
+        let mut circle_a_prev_pos = Vector3::new(-0.013462657, 0.06742557,  0.0);
+        let circle_a_curr_pos = Vector3::new(-0.0186382,   0.076581195, 0.0);
+        let circle_a_next_pos = Vector3::new(-0.023813741, 0.08573682,  0.0);
+        let mut circle_a_prev_velocity: Vector3<f32> = Vector3::new(-0.0051755426, 0.009155621, 0.0);
+        let circle_a_curr_velocity = Vector3::new(-0.0051755426, 0.009155621, 0.0);
+        
+        let mut circle_b_prev_pos = Vector3::new(-0.056902945, 0.2725812,  0.0);
+        let circle_b_curr_pos = Vector3::new(-0.056167364, 0.26809716, 0.0);
+        let circle_b_next_pos = Vector3::new(-0.055431783, 0.26361313, 0.0);
+        let mut circle_b_prev_velocity: Vector3<f32> = Vector3::new(0.0007355814, -0.0044840397, 0.0);
+        let circle_b_curr_velocity = Vector3::new(0.0007355814, -0.0044840397, 0.0);
+        
+        let res1 = super::CollisionSimulation::continous_circle_circle_collision_detection(
+            circle_a_prev_pos, circle_a_next_pos, radius, circle_b_prev_pos, circle_b_next_pos, radius);
+        assert_ne!(res1, None, "Expected collision but got None");
+        
+        let res2 = super::CollisionSimulation::continous_circle_circle_collision_detection(
+            circle_a_prev_pos, circle_a_curr_pos, radius, circle_b_prev_pos, circle_b_curr_pos, radius);
+        assert_ne!(res2, None, "Expected collision but got None");
+        
+        let ttc = res1.unwrap();
+        super::CollisionSimulation::circle_circle_collision_response(
+            ttc, &mut circle_a_prev_velocity, &mut circle_b_prev_velocity, 
+            &mut circle_a_prev_pos, &mut circle_b_prev_pos, 1.0,
+            1.0 );
+        
+        // Validate that the response would handle the scenario correctly
+        assert_ne!(circle_a_prev_velocity, circle_a_curr_velocity, "Expected different velocities but got the same");
+        assert_ne!(circle_b_prev_velocity, circle_b_curr_velocity, "Expected different velocities but got the same");
+    
     }
 
     #[test]
