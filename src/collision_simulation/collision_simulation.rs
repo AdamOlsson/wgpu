@@ -91,7 +91,7 @@ impl CollisionSimulation {
         *vb = new_velocity_j;
     }
 
-    fn _create_bbox(pos: Vector3<f32>, vel: Vector3<f32>, radius: f32) -> Vector4<f32> {
+    fn create_bbox(pos: Vector3<f32>, vel: Vector3<f32>, radius: f32) -> Vector4<f32> {
         let new_pos = pos + vel;
         let top_left_x = pos[0].min(new_pos[0]) - radius;
         let top_left_y = pos[1].max(new_pos[1]) + radius;
@@ -155,9 +155,45 @@ impl CollisionSimulation {
             self.positions[i] += self.velocities[i];
 
         }
-
-        
     }
+
+    // TODO: implement this function so that we in the future can compare
+    // the naive collision detection with the spatial subdivision algorithm.
+    // fn naive_collision_detection() {
+    //     for j in i..self.num_instances as usize {
+    //         if i == j {
+    //             continue;
+    //         }
+
+    //         let pos_other = self.positions[j];
+    //         let new_pos_other = pos_other + self.velocities[j];
+
+    //         if !CollisionSimulation::aabb_collision_detection(
+    //                 pos, new_pos, self.positions[j], self.positions[j] + self.velocities[j], self.radius) {
+    //             continue;
+    //         }
+
+
+    //         match CollisionSimulation::continous_circle_circle_collision_detection(
+    //             pos, new_pos, self.radius, pos_other, new_pos_other, self.radius) {
+    //             None => (), // No collision
+    //             Some(t) if -1.0 <= t && t <= 1.0 => {
+    //                 let mut va = self.velocities[i].clone();
+    //                 let mut vb = self.velocities[j].clone();
+    //                 let mut pa = self.positions[i].clone();
+    //                 let mut pb = self.positions[j].clone();
+                    
+    //                 CollisionSimulation::circle_circle_collision_response(
+    //                     t, &mut va, &mut vb, &mut pa, &mut pb,
+    //                     self.mass[i], self.mass[j]);
+
+    //                 self.velocities[i] = va;
+    //                 self.velocities[j] = vb;
+    //             },                    
+    //             _ => (),
+    //         }
+    //     }
+    // }
 
     /// Axis-aligned bounding box collision detection.
     /// 
