@@ -42,8 +42,8 @@ const BOTTOM_RIGHT: Vector3<f32> = Vector3::new(1.0, -1.0, 0.0);
 
 impl CollisionSimulation {
     pub fn new() -> Self{
-        let radius = 0.1;
-        let num_instances: u32 = 10;
+        let radius = 0.01;
+        let num_instances: u32 = 4000;
                 
         let positions = CollisionSimulation::generate_initial_positions(num_instances, radius);
         // let mut positions = [Vector3::new(0.0, 0.0, 0.0); MAX_INSTANCES];

@@ -129,7 +129,11 @@ impl SpatialSubdivision2D {
     fn compute_phantom_cell_ids(&self, bounding_sphere: Vector3<f32>, cell_size: f32, num_cells: u32) -> Vec<u32> {        
         let sphere_center = Vector2::new(bounding_sphere.x, bounding_sphere.y);
         let sphere_radius = bounding_sphere.z;
-        let home_cell_id = self.point_to_cell_id(sphere_center);
+        let clamped_sphere_center = Vector2::new(
+            sphere_center.x.min(1.999999).max(0.0),
+            sphere_center.y.min(1.999999).max(0.0)
+        );
+        let home_cell_id = self.point_to_cell_id(clamped_sphere_center);
 
         // The bounding sphere can only overlap 4 of these cells
         let neighbors_ids = SpatialSubdivision2D::get_neighbor_cell_ids(home_cell_id as i32, num_cells as i32);
@@ -143,7 +147,13 @@ impl SpatialSubdivision2D {
             let neighbor_center = SpatialSubdivision2D::get_cell_id_center(*neighbor_id, cell_size, num_cells);
 
             let sphere_edge_point = (neighbor_center - sphere_center).normalize() * sphere_radius + sphere_center;
-            let edge_cell = self.point_to_cell_id(sphere_edge_point);
+            
+            let clamped_sphere_edge_point = Vector2::new(
+                sphere_edge_point.x.min(1.999999).max(0.0),
+                sphere_edge_point.y.min(1.999999).max(0.0)
+            );
+            
+            let edge_cell = self.point_to_cell_id(clamped_sphere_edge_point);
             if neighbor_id == &edge_cell {
                 phantom_cell_ids.push(*neighbor_id);
             }
@@ -203,7 +213,7 @@ impl SpatialSubdivision2D {
                 control_bits: (home_cell_type << 4 | phantom_cell_bits)
             };
 
-            for (count,cell_id) in phantom_cell_ids.iter().enumerate() {
+            for (count, cell_id) in phantom_cell_ids.iter().enumerate() {
                 cells[offset + count] = cell_id.clone();
                 objects[offset + count] = object.clone();
             }
@@ -538,7 +548,7 @@ mod tests {
         }
 
         #[test]
-        fn test_point_to_cell_id_temp() {
+        fn test_point_to_cell_id_live_scenario_3() {
             let cell_size = 0.1;
             let ss = SpatialSubdivision2D::new(cell_size);
             let point = cgmath::Vector2::new(0.1029385, 0.082769275);
