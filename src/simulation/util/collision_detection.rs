@@ -12,7 +12,7 @@ use cgmath::{InnerSpace, MetricSpace, Vector3};
 /// Returns the point where the velocity line intersects with the boundary if there is a collision.
 pub(crate) fn circle_line_collision_detection(line_start: Vector3<f32>, line_stop: Vector3<f32>,
         curr_position: Vector3<f32>, new_position: Vector3<f32>, radius: f32) -> Option<Vector3<f32>> {
-    match line_line_intersect(line_start.into(), line_stop.into(), curr_position.into(), new_position.into()) {
+    match are_lines_parallell(line_start.into(), line_stop.into(), curr_position.into(), new_position.into()) {
         None => return None, // No collision
         Some(collision_point) => {
             // TODO: There are additional checks that can be done here to make sure there is a collision
@@ -35,16 +35,19 @@ pub(crate) fn circle_line_collision_detection(line_start: Vector3<f32>, line_sto
 
 /// Computes the intersection point of two lines.
 /// 
+/// Given two points per line, determine if the line running indefinetly between
+/// respective points ever intersect. If they do not interesect, they are parallell.
+/// 
 /// Returns the intersection point if the lines intersect, otherwise None.
 #[allow(non_snake_case)]
-pub(crate) fn line_line_intersect(A: [f32;3], B: [f32;3], C: [f32;3], D: [f32;3]) -> Option<Vector3<f32>>{
-    let a1 = B[1] - A[1];
-    let b1 = A[0] - B[0];
-    let c1 = a1 * A[0] + b1 * A[1];
+pub(crate) fn are_lines_parallell(start_a: [f32;3], end_a: [f32;3], start_b: [f32;3], end_b: [f32;3]) -> Option<Vector3<f32>>{
+    let a1 = end_a[1] - start_a[1];
+    let b1 = start_a[0] - end_a[0];
+    let c1 = a1 * start_a[0] + b1 * start_a[1];
 
-    let a2 = D[1] - C[1];
-    let b2 = C[0] - D[0];
-    let c2 = a2 * C[0] + b2 * C[1];
+    let a2 = end_b[1] - start_b[1];
+    let b2 = start_b[0] - end_b[0];
+    let c2 = a2 * start_b[0] + b2 * start_b[1];
 
     let determinant = a1 * b2 - a2 * b1;
     if determinant == 0.0 {
@@ -185,6 +188,52 @@ pub(crate) fn continous_circle_circle_collision_detection(
 
 #[cfg(test)]
 mod tests {
+
+    mod line_line_intersect {
+        use cgmath::Vector3;
+
+        use crate::simulation::util::collision_detection::are_lines_parallell;
+
+        #[test]
+        fn lines_do_not_intersect_line_direction_down(){
+            let line_a_start = [0.0, 0.0, 0.0];
+            let line_a_end = [1.0, 0.0, 0.0];
+            let line_b_start = [-1.0, 1.0, 0.0];
+            let line_b_end = [-1.0, -1.0, 0.0];
+
+            let res = are_lines_parallell(
+                line_a_start, line_a_end, line_b_start, line_b_end);
+
+            assert_eq!(res, Some(Vector3::new(-1.0, 0.0, 0.0)));
+        }
+
+        #[test]
+        fn lines_do_not_intersect_line_direction_up(){
+            let line_a_start = [0.0, 0.0, 0.0];
+            let line_a_end = [1.0, 0.0, 0.0];
+            let line_b_start = [-1.0, -1.0, 0.0];
+            let line_b_end = [-1.0, 1.0, 0.0];
+
+            let res = are_lines_parallell(
+                line_a_start, line_a_end, line_b_start, line_b_end);
+
+            assert_eq!(res, Some(Vector3::new(-1.0, 0.0, 0.0)));
+        }
+
+        #[test]
+        fn lines_are_parallell(){
+            let line_a_start = [0.0, 0.0, 0.0];
+            let line_a_end = [1.0, 0.0, 0.0];
+            let line_b_start = [0.0, 1.0, 0.0];
+            let line_b_end = [1.0, 1.0, 0.0];
+
+            let res = are_lines_parallell(
+                line_a_start, line_a_end, line_b_start, line_b_end);
+
+            assert_eq!(res, None);
+        }
+    }
+
     mod closest_point_on_line {
         use cgmath::Vector3;
 
