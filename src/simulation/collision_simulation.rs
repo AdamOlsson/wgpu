@@ -1,12 +1,10 @@
 
 
-use cgmath::{InnerSpace, MetricSpace, Vector3, Vector4};
-
-use rand::Rng;
+use cgmath::{InnerSpace, Vector3, Vector4};
 
 use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle, };
 
-use super::{spatial_subdivision::SpatialSubdivision2D, util::{collision_detection::{self, continous_circle_circle_collision_detection}, generate_initial_positions_square_grid, generate_random_colors, generate_random_velocities}};
+use super::{spatial_subdivision::SpatialSubdivision2D, util::{collision_detection::{self, continous_circle_circle_collision_detection}, collision_response::circle_circle_collision_response, generate_initial_positions_square_grid, generate_random_colors, generate_random_velocities}};
 
 
 const MAX_INSTANCES: usize = 10000;
@@ -57,33 +55,6 @@ impl CollisionSimulation {
         Self { positions, colors, mass, velocities, num_instances, radius, indices, num_indices, vertices }
     }
 
-    /// Computes the response of a collision between two circles.
-    /// 
-    /// Args:
-    /// - ttc: Time to collision
-    /// - va: Velocity of circle A
-    /// - vb: Velocity of circle B
-    /// - pa: Position of circle A
-    /// - pb: Position of circle B
-    /// - ma: Mass of circle A
-    /// - mb: Mass of circle B
-    /// 
-    /// The function computes the new velocities of the circles after a collision.
-    fn circle_circle_collision_response(
-            ttc: f32, 
-            va: &mut Vector3<f32>, vb: &mut Vector3<f32>,
-            pa: &mut Vector3<f32>, pb: &mut Vector3<f32>,
-            ma: f32, mb: f32) {
-        let collision_point_a = *pa + ttc * (*va);
-        let collision_point_other = *pb + ttc * (*vb);
-        let normal = (collision_point_a - collision_point_other).normalize();
-        let p = 2.0 * (va.dot(normal) - vb.dot(normal)) / (ma + mb);
-        let new_velocity_i = *va - p * mb * normal;
-        let new_velocity_j = *vb + p * ma * normal;
-        *va = new_velocity_i;
-        *vb = new_velocity_j;
-    }
-
     fn create_bbox(pos: Vector3<f32>, vel: Vector3<f32>, radius: f32) -> Vector4<f32> {
         let new_pos = pos + vel;
         let top_left_x = pos[0].min(new_pos[0]) - radius;
@@ -123,7 +94,7 @@ impl CollisionSimulation {
         let ss = SpatialSubdivision2D::new(cell_size);
         ss.run(&mut self.positions, &mut self.velocities,
             continous_circle_circle_collision_detection,
-            CollisionSimulation::circle_circle_collision_response,
+            circle_circle_collision_response,
             self.radius, &self.mass, &bounding_spheres);
 
         
@@ -271,7 +242,7 @@ impl CollisionSimulation {
 mod tests {
     use cgmath::Vector3;
 
-    use crate::simulation::util::collision_detection::continous_circle_circle_collision_detection;
+    use crate::simulation::util::{collision_detection::continous_circle_circle_collision_detection, collision_response::circle_circle_collision_response};
 
     #[test]
     fn test_continious_circle_collision_live_scenario_4() {
@@ -297,7 +268,7 @@ mod tests {
         assert_ne!(res2, None, "Expected collision but got None");
         
         let ttc = res1.unwrap();
-        super::CollisionSimulation::circle_circle_collision_response(
+        circle_circle_collision_response(
             ttc, &mut circle_a_prev_velocity, &mut circle_b_prev_velocity, 
             &mut circle_a_prev_pos, &mut circle_b_prev_pos, 1.0,
             1.0 );

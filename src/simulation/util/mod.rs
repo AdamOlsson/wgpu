@@ -1,4 +1,5 @@
 pub mod collision_detection;
+pub mod collision_response;
 
 use cgmath::Vector3;
 use rand::Rng;

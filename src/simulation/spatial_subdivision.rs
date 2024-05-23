@@ -365,7 +365,7 @@ impl SpatialSubdivision2D {
             positions: &mut [Vector3<f32>; 10000], velocities: &mut [Vector3<f32>; 10000],
             mass: &[f32; 10000],
             collision_check_fn: fn(Vector3<f32>, Vector3<f32>, f32, Vector3<f32>, Vector3<f32>, f32) -> Option<f32>,
-            collision_response_fn: fn(f32, &mut Vector3<f32>, &mut Vector3<f32>, &mut Vector3<f32>, &mut Vector3<f32>, f32, f32),
+            collision_response_fn: fn(f32, &mut Vector3<f32>, &mut Vector3<f32>, &Vector3<f32>, &Vector3<f32>, f32, f32),
             radius: f32) {
         for collision in pass {
             let offset = collision.offset;
@@ -424,7 +424,7 @@ impl SpatialSubdivision2D {
             collision_response_fn: 
                 fn(ttc: f32, 
                     &mut Vector3<f32>, &mut Vector3<f32>,
-                    &mut Vector3<f32>, &mut Vector3<f32>,
+                    &Vector3<f32>, &Vector3<f32>,
                     f32, f32),
             radius: f32,
             mass: &[f32; 10000],
