@@ -1,6 +1,6 @@
 use winit::window::Window;
 
-use crate::{collision_simulation::collision_simulation::CollisionSimulation, renderer_backend::{graphics_context::GraphicsContext, instance::Instance, render_pass::RenderPass, Pass}};
+use crate::{simulation::{collision_simulation::CollisionSimulation, gravity_simulation::GravitySimulation}, renderer_backend::{graphics_context::GraphicsContext, instance::Instance, render_pass::RenderPass, Pass}};
 
 
 pub struct State<'a> {
@@ -9,7 +9,9 @@ pub struct State<'a> {
     pass: RenderPass,
     size: winit::dpi::PhysicalSize<u32>,
 
-    collision_simulation: CollisionSimulation,
+    // simulation: GravitySimulation,
+    simulation: CollisionSimulation,
+
     instance_buffer: wgpu::Buffer,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
@@ -23,20 +25,21 @@ impl <'a> State <'a> {
 
         let pass = RenderPass::new(&ctx.device);
         
-        let collision_simulation = CollisionSimulation::new();
+        let simulation = CollisionSimulation::new();
+        // let simulation = GravitySimulation::new();
     
         let vertex_buffer = ctx.create_buffer(
-            "Circle vertex buffer", bytemuck::cast_slice(&collision_simulation.vertices),
+            "Circle vertex buffer", bytemuck::cast_slice(&simulation.vertices),
             wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST);
 
         let index_buffer = ctx.create_buffer(
-                "Circle index buffer", bytemuck::cast_slice(&collision_simulation.indices),
+                "Circle index buffer", bytemuck::cast_slice(&simulation.indices),
                 wgpu::BufferUsages::INDEX);
         
-        let instances = (0..collision_simulation.num_instances as usize).map(
+        let instances = (0..simulation.num_instances as usize).map(
             |i| Instance {
-                position: collision_simulation.positions[i].into(),
-                color: collision_simulation.colors[i].into(),
+                position: simulation.positions[i].into(),
+                color: simulation.colors[i].into(),
             }).collect::<Vec<_>>();
 
         let instance_buffer = ctx.create_buffer(
@@ -47,7 +50,7 @@ impl <'a> State <'a> {
 
         Self { window, ctx, pass, size, instance_buffer,
                 vertex_buffer, index_buffer, 
-                collision_simulation
+                simulation
                 }
     }
 
@@ -59,11 +62,11 @@ impl <'a> State <'a> {
     }
 
     pub fn update(&mut self) {
-        self.collision_simulation.update();
+        self.simulation.update();
 
         let mut instance_data: Vec<[[f32;3];2]> = Vec::new();
-        for i in 0..self.collision_simulation.num_instances as usize {
-            instance_data.push([self.collision_simulation.positions[i].into(), self.collision_simulation.colors[i].into()]);
+        for i in 0..self.simulation.num_instances as usize {
+            instance_data.push([self.simulation.positions[i].into(), self.simulation.colors[i].into()]);
         }
         
         // To prevent writing the static colors every run, we probably can use a global buffer and write 
@@ -77,8 +80,8 @@ impl <'a> State <'a> {
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         self.pass.draw(&self.ctx.surface, &self.ctx.device, &self.ctx.queue,
             &self.vertex_buffer, &self.index_buffer, &self.instance_buffer,
-            self.collision_simulation.num_indices,
-            self.collision_simulation.num_instances
+            self.simulation.num_indices,
+            self.simulation.num_instances
         ).unwrap();
         return Ok(());
     }

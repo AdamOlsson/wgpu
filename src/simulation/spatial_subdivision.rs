@@ -762,7 +762,7 @@ mod tests {
     }
 
     mod test_construct_arrays {
-        use crate::collision_simulation::spatial_subdivision::{Object, SpatialSubdivision2D, SPATIAL_SUBDIVISION_2D_CELL_OFFSET};
+        use crate::simulation::spatial_subdivision::{Object, SpatialSubdivision2D, SPATIAL_SUBDIVISION_2D_CELL_OFFSET};
         
         #[test]
         fn test_construct_arrays_one_object_max_num_phantom_cells(){
@@ -969,7 +969,7 @@ mod tests {
     mod test_sort_arrays {
         use std::u32;
 
-        use crate::collision_simulation::spatial_subdivision::{Object, SpatialSubdivision2D, SPATIAL_SUBDIVISION_2D_CELL_OFFSET};
+        use crate::simulation::spatial_subdivision::{Object, SpatialSubdivision2D, SPATIAL_SUBDIVISION_2D_CELL_OFFSET};
 
         #[test]
         fn test_sort_arrays() {
@@ -1054,7 +1054,7 @@ mod tests {
     }
 
     mod test_get_neighbor_cell_ids {
-        use crate::collision_simulation::spatial_subdivision::SpatialSubdivision2D;
+        use crate::simulation::spatial_subdivision::SpatialSubdivision2D;
 
         #[test]
         fn test_get_neighbor_cell_ids_top_left() {
@@ -1103,7 +1103,7 @@ mod tests {
     }
 
     mod test_create_collision_cell_list {
-        use crate::collision_simulation::spatial_subdivision::{CollisionCell, Object, SpatialSubdivision2D, SPATIAL_SUBDIVISION_2D_CELL_OFFSET};
+        use crate::simulation::spatial_subdivision::{CollisionCell, Object, SpatialSubdivision2D, SPATIAL_SUBDIVISION_2D_CELL_OFFSET};
 
         #[test]
         fn test_create_collision_cell_list_no_collisions(){
@@ -1449,7 +1449,7 @@ mod tests {
 
         use cgmath::Vector3;
 
-        use crate::collision_simulation::spatial_subdivision::{CollisionCell, Object, SpatialSubdivision2D, SPATIAL_SUBDIVISION_2D_CELL_OFFSET};
+        use crate::simulation::spatial_subdivision::{CollisionCell, Object, SpatialSubdivision2D, SPATIAL_SUBDIVISION_2D_CELL_OFFSET};
 
         #[test]
         fn test_full_live_scenario_3() {
@@ -1570,7 +1570,7 @@ mod tests {
     }
 
     mod test_collision_check {
-        use crate::collision_simulation::spatial_subdivision::{Object, SpatialSubdivision2D};
+        use crate::simulation::spatial_subdivision::{Object, SpatialSubdivision2D};
         #[test]
         fn test_skip_detailed_collision_check_1() {
             let a = Object  {
