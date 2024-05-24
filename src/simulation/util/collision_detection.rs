@@ -12,7 +12,7 @@ use cgmath::{InnerSpace, MetricSpace, Vector3};
 /// Returns the point where the velocity line intersects with the boundary if there is a collision.
 pub(crate) fn circle_line_collision_detection(line_start: Vector3<f32>, line_stop: Vector3<f32>,
         curr_position: Vector3<f32>, new_position: Vector3<f32>, radius: f32) -> Option<Vector3<f32>> {
-    match are_lines_parallell(line_start.into(), line_stop.into(), curr_position.into(), new_position.into()) {
+    match do_lines_intersect(line_start.into(), line_stop.into(), curr_position.into(), new_position.into()) {
         None => return None, // No collision
         Some(collision_point) => {
             // TODO: There are additional checks that can be done here to make sure there is a collision
@@ -40,7 +40,7 @@ pub(crate) fn circle_line_collision_detection(line_start: Vector3<f32>, line_sto
 /// 
 /// Returns the intersection point if the lines intersect, otherwise None.
 #[allow(non_snake_case)]
-pub(crate) fn are_lines_parallell(start_a: [f32;3], end_a: [f32;3], start_b: [f32;3], end_b: [f32;3]) -> Option<Vector3<f32>>{
+pub(crate) fn do_lines_intersect(start_a: [f32;3], end_a: [f32;3], start_b: [f32;3], end_b: [f32;3]) -> Option<Vector3<f32>>{
     let a1 = end_a[1] - start_a[1];
     let b1 = start_a[0] - end_a[0];
     let c1 = a1 * start_a[0] + b1 * start_a[1];
@@ -58,6 +58,44 @@ pub(crate) fn are_lines_parallell(start_a: [f32;3], end_a: [f32;3], start_b: [f3
     let y = (a1 * c2 - a2 * c1) / determinant;
     Some(Vector3::new(x, y, 0.0))
 }
+
+/// Computes whether two line segments intersect.
+/// 
+/// Returns None if the line segments are not intersecting, collinear or parallell and
+/// the intersection point if the line segments intersect.
+pub(crate) fn do_line_segments_intersect(
+        start_a: Vector3<f32>, end_a: Vector3<f32>,
+        start_b: Vector3<f32>, end_b: Vector3<f32>) -> Option<Vector3<f32>>{
+    let p = start_a;
+    let r = end_a - start_a;
+    let q = start_b;
+    let s = end_b - start_b;
+
+    // define dot product as v * w = vx*wy - vy*wx
+    let rs = r.x*s.y - r.y*s.x;
+    let qp = q-p;
+    let qpr = qp.x*r.y - qp.y*r.x;
+    // Line segments are collinear
+    if rs == 0.0 && qpr == 0.0 {
+        return None;
+    }
+    // Lines segments are parallell
+    if rs == 0.0 && qpr != 0.0 {
+        return None;
+    }
+    let qps = qp.x*s.y - qp.y*s.x;
+    let t = qps / rs;
+    let u = qpr / rs;
+    // Lines segments intersect at the returned point
+    if rs != 0.0 &&
+            0.0 <= t && t <= 1.0 &&
+            0.0 <= u && u <= 1.0 {
+        return Some(p + t*r);
+    }
+    // Lines are not parallell and do not intersect
+    return None;
+}
+
 
 /// Computes the closest point on a line to a given point.
 /// 
@@ -186,13 +224,122 @@ pub(crate) fn continous_circle_circle_collision_detection(
 }
 
 
+
 #[cfg(test)]
 mod tests {
 
-    mod line_line_intersect {
+    mod do_line_segments_intersect {
+
         use cgmath::Vector3;
 
-        use crate::simulation::util::collision_detection::are_lines_parallell;
+        use crate::simulation::util::collision_detection::do_line_segments_intersect;
+        
+        #[test]
+        fn line_segments_are_collinear() {
+            let mut line_a_start = [0.0, 0.0, 0.0];
+            let mut line_a_end = [1.0, 0.0, 0.0];
+            let mut line_b_start = [2.0, 0.0, 0.0];
+            let mut line_b_end = [3.0, 0.0, 0.0];
+            let mut res = do_line_segments_intersect(
+                line_a_start.into(), line_a_end.into(), 
+                         line_b_start.into(), line_b_end.into());
+            assert_eq!(res, None);
+ 
+            line_a_start = [0.0, 0.0, 0.0];
+            line_a_end = [1.0, 0.0, 0.0];
+            line_b_start = [3.0, 0.0, 0.0];
+            line_b_end = [2.0, 0.0, 0.0];
+            res = do_line_segments_intersect(
+                line_a_start.into(), line_a_end.into(), 
+                         line_b_start.into(), line_b_end.into());
+            assert_eq!(res, None);
+ 
+            line_a_start = [0.0, 1.0, 0.0];
+            line_a_end = [1.0, 2.0, 0.0];
+            line_b_start = [2.0, 3.0, 0.0];
+            line_b_end = [3.0, 4.0, 0.0];
+            res = do_line_segments_intersect(
+                line_a_start.into(), line_a_end.into(), 
+                         line_b_start.into(), line_b_end.into());
+            assert_eq!(res, None);
+        
+        }
+
+        #[test]
+        fn line_segments_do_not_intersect() {
+            let mut line_a_start = [0.0, 0.0, 0.0];
+            let mut line_a_end = [1.0, 0.0, 0.0];
+            let mut line_b_start = [-1.0, 1.0, 0.0];
+            let mut line_b_end = [-1.0, -1.0, 0.0];
+            let mut res = do_line_segments_intersect(
+                line_a_start.into(), line_a_end.into(), 
+                         line_b_start.into(), line_b_end.into());
+            assert_eq!(res, None);
+            
+            line_a_start = [0.0, 0.0, 0.0];
+            line_a_end = [1.0, 0.0, 0.0];
+            line_b_start = [-1.0, -1.0, 0.0];
+            line_b_end = [-1.0, 1.0, 0.0];
+            res = do_line_segments_intersect(
+                line_a_start.into(), line_a_end.into(), 
+                         line_b_start.into(), line_b_end.into());
+            assert_eq!(res, None);
+ 
+            line_a_start = [0.0, 0.0, 0.0];
+            line_a_end = [1.0, 0.0, 0.0];
+            line_b_start = [0.0, 2.0, 0.0];
+            line_b_end = [0.0, 1.0, 0.0];
+            res = do_line_segments_intersect(
+                line_a_start.into(), line_a_end.into(), 
+                         line_b_start.into(), line_b_end.into());
+            assert_eq!(res, None);
+        }
+
+        #[test]
+        fn line_segments_intersect(){
+            let mut line_a_start = [-1.0, 0.0, 0.0];
+            let mut line_a_end = [1.0, 0.0, 0.0];
+            let mut line_b_start = [0.0, 1.0, 0.0];
+            let mut line_b_end = [0.0, -1.0, 0.0];
+            let mut res = do_line_segments_intersect(
+                line_a_start.into(), line_a_end.into(), 
+                         line_b_start.into(), line_b_end.into());
+            assert_eq!(res, Some(Vector3::new(0.0,0.0,0.0)));
+            
+            line_a_start = [0.0, 1.0, 0.0];
+            line_a_end = [0.0, -1.0, 0.0];
+            line_b_start = [1.0, 0.0, 0.0];
+            line_b_end = [-1.0, 0.0, 0.0];
+            res = do_line_segments_intersect(
+                line_a_start.into(), line_a_end.into(), 
+                         line_b_start.into(), line_b_end.into());
+            assert_eq!(res, Some(Vector3::new(0.0,0.0,0.0)));
+
+            line_a_start = [-1.0, -1.0, 0.0];
+            line_a_end = [1.0, 1.0, 0.0];
+            line_b_start = [-1.0, 1.0, 0.0];
+            line_b_end = [1.0, -1.0, 0.0];
+            res = do_line_segments_intersect(
+                line_a_start.into(), line_a_end.into(), 
+                         line_b_start.into(), line_b_end.into());
+            assert_eq!(res, Some(Vector3::new(0.0,0.0,0.0)));
+
+            line_a_start = [0.0, 0.0, 0.0];
+            line_a_end = [1.0, 0.0, 0.0];
+            line_b_start = [0.75, 1.0, 0.0];
+            line_b_end = [0.75, -1.0, 0.0];
+            res = do_line_segments_intersect(
+                line_a_start.into(), line_a_end.into(), 
+                         line_b_start.into(), line_b_end.into());
+            assert_eq!(res, Some(Vector3::new(0.75,0.0,0.0)));
+
+
+        }
+    }
+    mod do_lines_intersect {
+        use cgmath::Vector3;
+
+        use crate::simulation::util::collision_detection::do_lines_intersect;
 
         #[test]
         fn lines_do_not_intersect_line_direction_down(){
@@ -201,7 +348,7 @@ mod tests {
             let line_b_start = [-1.0, 1.0, 0.0];
             let line_b_end = [-1.0, -1.0, 0.0];
 
-            let res = are_lines_parallell(
+            let res = do_lines_intersect(
                 line_a_start, line_a_end, line_b_start, line_b_end);
 
             assert_eq!(res, Some(Vector3::new(-1.0, 0.0, 0.0)));
@@ -214,7 +361,7 @@ mod tests {
             let line_b_start = [-1.0, -1.0, 0.0];
             let line_b_end = [-1.0, 1.0, 0.0];
 
-            let res = are_lines_parallell(
+            let res = do_lines_intersect(
                 line_a_start, line_a_end, line_b_start, line_b_end);
 
             assert_eq!(res, Some(Vector3::new(-1.0, 0.0, 0.0)));
@@ -227,7 +374,7 @@ mod tests {
             let line_b_start = [0.0, 1.0, 0.0];
             let line_b_end = [1.0, 1.0, 0.0];
 
-            let res = are_lines_parallell(
+            let res = do_lines_intersect(
                 line_a_start, line_a_end, line_b_start, line_b_end);
 
             assert_eq!(res, None);
