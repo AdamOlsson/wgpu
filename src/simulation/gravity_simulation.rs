@@ -3,7 +3,7 @@ use cgmath::Vector3;
 
 use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
 
-use super::util::{collision_detection::do_line_segments_intersect, generate_initial_positions_square_grid, generate_random_colors, MAX_INSTANCES};
+use super::util::{collision_detection::{circle_line_segment_collision_detection, do_line_segments_intersect}, generate_initial_positions_square_grid, generate_random_colors, MAX_INSTANCES};
 
 
 pub struct GravitySimulation {
@@ -54,10 +54,13 @@ impl GravitySimulation {
             let bottom_left_corner = Vector3::new(-1.0, -1.0, 0.0);
             let bottom_right_corner = Vector3::new(2.0, -1.0, 0.0);
             let start_pos = self.positions[i];
-            let end_pos = start_pos + self.velocities[i]; // FIXME: Not correct as we need to take the radius into consideration
-            match do_line_segments_intersect(bottom_left_corner, bottom_right_corner, start_pos, end_pos) {
-                Some(_) => self.velocities[i].y *= -1.0, // TODO: Implement non-elastic collision response
+            let end_pos = start_pos + self.velocities[i]; 
+            match circle_line_segment_collision_detection(bottom_left_corner, bottom_right_corner, start_pos, end_pos, self.radius) {
                 None => (),
+                Some((circle_center_collision_point, line_collision_point)) => 
+                    {
+                        self.velocities[i].y *= -1.0; // TODO: Implement non-elastic collision response
+                    }
             }
 
             self.positions[i] += self.velocities[i];

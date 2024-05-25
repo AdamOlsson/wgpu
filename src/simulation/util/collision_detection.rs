@@ -1,6 +1,5 @@
-use cgmath::{num_traits::Float, InnerSpace, MetricSpace, Vector3};
+use cgmath::{InnerSpace, MetricSpace, Vector3};
 
-    
 /// Continous dynamic circle and static line collision detection.
 /// 
 /// Evaluates wether a circle is about to collide with a line. It does so by 
@@ -34,38 +33,64 @@ pub(crate) fn circle_line_collision_detection(line_start: Vector3<f32>, line_sto
     }
 }
 
+/// Evaluate if a circle will collide with a line segment in the next timestep
+/// 
+/// Return None if no collision occur, and the circles center position and
+/// point of collision on the line otherwise.
 pub(crate) fn circle_line_segment_collision_detection(
         line_start: Vector3<f32>, line_end: Vector3<f32>, 
         curr_pos: Vector3<f32>, new_pos: Vector3<f32>,
-        radius: f32) -> Option<Vector3<f32>> {
+        radius: f32) -> Option<(Vector3<f32>, Vector3<f32>)> {
     // https://ericleong.me/research/circle-line/
     // Intersect point is on the movement vector
-    let on_movement_vec = do_line_segments_intersect(
+    let intersect_point = do_line_segments_intersect(
         line_start, line_end, curr_pos, new_pos);
-    if on_movement_vec != None {
-        return on_movement_vec;
+    if intersect_point != None {
+        let velocity = new_pos - curr_pos;
+        let circle_center_pos_at_collision = compute_collision_point(
+            line_start, line_end, curr_pos,
+            velocity,intersect_point.unwrap(), radius);
+        return Some((circle_center_pos_at_collision, intersect_point.unwrap()));
     }
 
     let radius_sqrd = radius.powi(2);
     let point_b = closest_point_on_line_segment(line_start, line_end, new_pos);
     // b is less than r away from the movement end and on the segment
-    if point_b.distance2(new_pos) < radius_sqrd{
-        return Some(point_b);
+    if point_b.distance2(new_pos) < radius_sqrd {
+        // Because the velocity vector does not intersect with the given line we
+        // double the velocity so that i does intersect with the given line because
+        // compute_collision_point() requires it
+        let double_velocity = (new_pos - curr_pos)*128.0;
+        let intersect_point = do_line_segments_intersect(
+            line_start, line_end, curr_pos, curr_pos+double_velocity).unwrap();
+        let circle_center_pos_at_collision = compute_collision_point(
+            line_start, line_end, curr_pos,
+            double_velocity, intersect_point, radius);
+        let line_point_at_collision = closest_point_on_line_segment(line_start, line_end, circle_center_pos_at_collision);
+        return Some((circle_center_pos_at_collision, line_point_at_collision ));
     }
 
     let point_c = closest_point_on_line_segment(curr_pos,new_pos, line_start);
     // c is less than r away from line start and on the movement vector
     if point_c.distance2(line_start) < radius_sqrd {
-        return Some(point_c);
-    
+        // We treat ends of line segments as circle with radius 0
+        let ttc = continous_circle_circle_collision_detection(
+            curr_pos, new_pos, radius,
+            line_start, line_start, 0.0).unwrap();
+        let vector_to_collision= (new_pos-curr_pos)*ttc;
+        return Some((curr_pos+vector_to_collision, line_start));
     }
 
     let point_d = closest_point_on_line_segment(curr_pos,new_pos, line_end);
-    // c is less than r away from line start and on the movement vector
+    // d is less than r away from line start and on the movement vector
     if point_d.distance2(line_end) < radius_sqrd {
-        return Some(point_d);
+        // We treat ends of line segments as circle with radius 0
+        let ttc = continous_circle_circle_collision_detection(
+            curr_pos, new_pos, radius,
+            line_end, line_end, 0.0).unwrap();
+        let vector_to_collision= (new_pos-curr_pos)*ttc;
+        return Some((curr_pos+vector_to_collision, line_end));
     }
-
     return None;
 }
 
@@ -133,7 +158,8 @@ pub(crate) fn do_line_segments_intersect(
 }
 
 
-/// Computes the closest point on a line to a given point.
+/// Computes the closest point on a line running indefinetely
+/// between the given line points to a given point.
 /// 
 /// Returns the closest point on the line.
 pub(crate) fn closest_point_on_line(line_start: Vector3<f32>, line_end: Vector3<f32>, p: Vector3<f32>) -> Vector3<f32> {
@@ -144,6 +170,9 @@ pub(crate) fn closest_point_on_line(line_start: Vector3<f32>, line_end: Vector3<
     return proj;
 }
 
+/// Compute the closest point on a line segment to a given point.
+/// 
+/// Returns the closest point on the line segment.
 pub(crate) fn closest_point_on_line_segment(line_start: Vector3<f32>, line_end: Vector3<f32>, p: Vector3<f32>) -> Vector3<f32> {
     let ab = line_end - line_start;
     let t = (p-line_start).dot(ab) / ab.dot(ab);
@@ -154,21 +183,19 @@ pub(crate) fn closest_point_on_line_segment(line_start: Vector3<f32>, line_end: 
 
 /// Computes the point where the circle will collide with the boundary.
 /// 
-/// The function assumes that the circle will collide with the boundary in the next
-/// timestep. It computes the collision point with respect to the circle's radius.
+/// The function assumes that the velocity vector of the circle will intersect 
+/// with the given line in the next timestep.
 /// 
 /// Returns the point where the circle will collide with the boundary.
 pub(crate) fn compute_collision_point(
-        boundary_start: Vector3<f32>, boundary_stop: Vector3<f32>,
+        line_start: Vector3<f32>, line_end: Vector3<f32>,
         curr_position: Vector3<f32>, velocity_vec: Vector3<f32>,
             line_collision_point: Vector3<f32>, radius: f32) -> Vector3<f32>{
     let a = line_collision_point;
     let r = radius;
     let c = curr_position;
     let a_c_len = (c).distance(a); // Can be optimized by not taking sqrt (.distance2())
-    let p1 = closest_point_on_line(
-        boundary_start, boundary_stop, 
-        Vector3::new(c[0], c[1], c[2]));
+    let p1 = closest_point_on_line(line_start, line_end, c);
     let p1_c = (c).distance(p1); // Can be optimized by not taking sqrt (.distance2())
     let v = f32::sqrt(velocity_vec[0].powi(2) + velocity_vec[1].powi(2));
     let p2_x = a[0] - r * (a_c_len/p1_c)*velocity_vec[0]/v;
@@ -292,11 +319,59 @@ mod tests {
             res = circle_line_segment_collision_detection(
                 line_start.into(), line_end.into(), curr_pos.into(), new_pos.into(), radius);
             assert_eq!(res, None); // In this time step there is a "touch" but the movement ends there
+        }
 
-            new_pos = [0.0, 0.09999999, 0.0];
+        #[test]
+        fn on_movement_vector() {
+            let radius = 0.1;
+            let line_start = [-1.0, 0.0, 0.0];
+            let line_end = [1.0, 0.0, 0.0];
+            let curr_pos = [0.0, 1.0, 0.0];
+            let new_pos = [0.0, -1.0, 0.0];
+        
+            let res = circle_line_segment_collision_detection(
+                line_start.into(), line_end.into(), curr_pos.into(), new_pos.into(), radius);
+            assert_eq!(res, Some((Vector3::new(0.0,0.1,0.0), Vector3::new(0.0,0.0,0.0)))); 
+        }
+        #[test]
+        fn end_point_less_than_radius_away_from_line() {
+            let radius = 0.1;
+            let line_start = [-1.0, 0.0, 0.0];
+            let line_end = [1.0, 0.0, 0.0];
+            let mut curr_pos = [0.0, 1.0, 0.0];
+            let mut new_pos = [0.0, 0.05, 0.0];
+        
+            let mut res = circle_line_segment_collision_detection(
+                line_start.into(), line_end.into(), curr_pos.into(), new_pos.into(), radius);
+            assert_eq!(res, Some((Vector3::new(0.0,0.1,0.0), Vector3::new(0.0,0.0,0.0)))); 
+        
+            curr_pos = [-0.5, 0.5, 0.0];
+            new_pos =  [-0.05, 0.05, 0.0];
             res = circle_line_segment_collision_detection(
                 line_start.into(), line_end.into(), curr_pos.into(), new_pos.into(), radius);
-            assert_eq!(res, Some(Vector3::new(0.0,0.0,0.0))); 
+            assert_eq!(res, Some((Vector3::new(-0.1,0.1,0.0), Vector3::new(-0.100000024, 0.0, 0.0)))); 
+        }
+
+        #[test]
+        fn collision_with_line_segment_endpoint() {
+            let radius = 0.1;
+            let mut line_start = [0.0, 0.0, 0.0];
+            let mut line_end = [0.0, -1.0, 0.0];
+            let mut curr_pos = [-1.0, 0.01, 0.0];
+            let mut new_pos = [1.0, 0.01, 0.0];
+        
+            let mut res = circle_line_segment_collision_detection(
+                line_start.into(), line_end.into(), curr_pos.into(), new_pos.into(), radius);
+            assert_eq!(res, Some((Vector3::new(-0.09949863, 0.01, 0.0), Vector3::new(0.0, 0.0, 0.0))));
+        
+            line_start = [0.0, 1.0, 0.0];
+            line_end = [0.0, 0.0, 0.0];
+            curr_pos = [-1.0, -0.01, 0.0];
+            new_pos = [1.0, -0.01, 0.0];
+            res = circle_line_segment_collision_detection(
+                line_start.into(), line_end.into(), curr_pos.into(), new_pos.into(), radius);
+            assert_eq!(res, Some((Vector3::new(-0.09949863, -0.01, 0.0), Vector3::new(0.0, 0.0, 0.0)))); 
+        
         }
     }
     mod do_line_segments_intersect {
