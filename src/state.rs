@@ -9,8 +9,8 @@ pub struct State<'a> {
     pass: RenderPass,
     size: winit::dpi::PhysicalSize<u32>,
 
-    // simulation: GravitySimulation,
-    simulation: CollisionSimulation,
+    simulation: GravitySimulation,
+    //simulation: CollisionSimulation,
 
     instance_buffer: wgpu::Buffer,
     vertex_buffer: wgpu::Buffer,
@@ -25,8 +25,8 @@ impl <'a> State <'a> {
 
         let pass = RenderPass::new(&ctx.device);
         
-        let simulation = CollisionSimulation::new();
-        // let simulation = GravitySimulation::new();
+        //let simulation = CollisionSimulation::new();
+        let simulation = GravitySimulation::new();
     
         let vertex_buffer = ctx.create_buffer(
             "Circle vertex buffer", bytemuck::cast_slice(&simulation.vertices),
