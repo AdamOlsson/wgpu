@@ -3,7 +3,7 @@ use cgmath::Vector3;
 
 use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
 
-use super::util::{collision_detection::{circle_line_segment_collision_detection, do_line_segments_intersect}, generate_initial_positions_square_grid, generate_random_colors, MAX_INSTANCES};
+use super::util::{collision_detection::{circle_line_segment_collision_detection, do_line_segments_intersect}, collision_response::circle_circle_collision_response, generate_initial_positions_square_grid, generate_random_colors, MAX_INSTANCES};
 
 
 pub struct GravitySimulation {
@@ -14,6 +14,7 @@ pub struct GravitySimulation {
 
     pub num_instances: u32,
     radius: f32,
+    g: f32,
 
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u16>,
@@ -35,15 +36,16 @@ impl GravitySimulation {
         let indices = Circle::compute_indices();
         let num_indices = (359)*3;
 
-        Self { positions, colors, mass, velocities, num_instances, radius, indices, num_indices, vertices }
+        let g = 9.82; // m/s2
+
+        Self { positions, colors, mass, velocities, num_instances, radius, g, indices, num_indices, vertices }
     }
 
     pub fn update(&mut self) {
 
         // Accelerate due to gravity
-        let g = 9.82; // m/s2
         let g_direction = Vector3::new(0.0,-1.0,0.0);
-        let g_vector = g_direction*g * 0.1;
+        let g_vector = g_direction* self.g * 0.1;
         let timestep = 0.001; // 1 ms // TODO: Separate simulation timestep from framerate
         for i in 0..self.num_indices as usize {
             let new_velocity_y = self.velocities[i] + g_vector*timestep;
@@ -59,7 +61,8 @@ impl GravitySimulation {
                 None => (),
                 Some((circle_center_collision_point, line_collision_point)) => 
                     {
-                        self.velocities[i].y *= -1.0; // TODO: Implement non-elastic collision response
+                        let crf = 0.8;
+                        self.velocities[i].y *= -1.0 * crf;
                     }
             }
 

@@ -271,7 +271,7 @@ mod tests {
         circle_circle_collision_response(
             ttc, &mut circle_a_prev_velocity, &mut circle_b_prev_velocity, 
             &mut circle_a_prev_pos, &mut circle_b_prev_pos, 1.0,
-            1.0 );
+            1.0, 1.0 );
         
         // Validate that the response would handle the scenario correctly
         assert_ne!(circle_a_prev_velocity, circle_a_curr_velocity, "Expected different velocities but got the same");
