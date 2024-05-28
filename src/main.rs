@@ -29,7 +29,6 @@ async fn run() {
     let mut state = state::State::new(&window).await;
 
     std::thread::spawn(move || loop {
-        std::thread::sleep(std::time::Duration::from_millis(17));
         event_loop_proxy.send_event(CustomEvent::Timer).ok();
     });
 
@@ -39,7 +38,6 @@ async fn run() {
                 let start = Instant::now();
                 state.update();
                 let duration = start.elapsed();
-                println!("Update took: {:?}ms", duration.as_millis());
                 state.render().unwrap();
             }
             Event::WindowEvent {
