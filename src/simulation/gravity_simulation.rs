@@ -59,42 +59,50 @@ impl GravitySimulation {
         // Accelerate due to gravity
         let gravity_vector = self.g * timestep;
         for i in 0..self.num_indices as usize {
-            let mut pos = self.positions[i];
-            let mut vel = self.velocities[i];
+            let pos = self.positions[i];
+            let vel = self.velocities[i];
             let predicted_vel =  vel + gravity_vector;
             let predicted_pos = pos + predicted_vel * timestep; 
     
-            Self::border_collision_detection_and_resolution(
-                &mut pos, &predicted_pos,
-                &mut vel, &predicted_vel,
+            let (new_pos, new_vel) = Self::border_collision_detection_and_resolution(
+                &pos, &predicted_pos,
+                &vel, &predicted_vel,
                 self.radius, timestep, &self.g);
             
-            self.positions[i] = pos;
-            self.velocities[i] = vel;
+            self.positions[i] = new_pos;
+            self.velocities[i] = new_vel;
         }
     }
 
-
+    /// Perform collision detection and response with all 4 boundaries.
+    /// 
+    /// Args:
+    /// - pos: the position of the circle at the start of the timestep.
+    /// - pred_pos: the predicted position if no collision had occured.
+    /// - vel: the velocity of the circle at the start of the timestep.
+    /// - pred_vel: the predicted velocity if no collisions occured.
+    /// - radius: the radius of the circle.
+    /// - timestep: size of the timestep in milliseconds.
+    /// - gravity: the gravity vector.
+    /// 
+    /// Returns the new position and velocity after collision response.
     fn border_collision_detection_and_resolution(
-        pos: &mut Vector3<f32>, pred_pos: &Vector3<f32>,
-        vel:  &mut Vector3<f32>, pred_vel: &Vector3<f32>,
+        pos: &Vector3<f32>, pred_pos: &Vector3<f32>,
+        vel:  &Vector3<f32>, pred_vel: &Vector3<f32>,
         radius: f32, timestep: f32, gravity: &Vector3<f32>
-    ) {
+    ) -> (Vector3<f32>, Vector3<f32>){
         // Check for collision with bottom boundary
         let bottom_left_corner = Vector3::new(-1.0, -1.0, 0.0);
         let bottom_right_corner = Vector3::new(2.0, -1.0, 0.0);
         match circle_line_segment_collision_detection(
                 &bottom_left_corner, &bottom_right_corner,
                     pos, pred_pos, radius) {
-            None =>  {
-                *pos = *pred_pos;
-                *vel = *pred_vel;
-            },
+            None => return (*pred_pos, *pred_vel), 
             Some(fraction) => {
 
                 if -VELOCITY_ZERO_THRESH < vel.y && vel.y < VELOCITY_ZERO_THRESH {
-                    vel.y = 0.0;
-                    return; // TODO: Might not be right. Consider a ball rolling and hitting a vertical boundary
+                    let new_vel = Vector3::new(vel.x, 0.0, vel.z);
+                    return (*pos, new_vel); // TODO: Might not be right. Consider a ball rolling and hitting a vertical boundary
                 } 
                 // https://www.gamedev.net/forums/topic/571402-ball-never-stops-bouncing/4651063/
                 let ttc = timestep*fraction;
@@ -113,8 +121,7 @@ impl GravitySimulation {
                 let new_position = pre_collision_point + post_collision_vel*tac + 0.5 * gravity*tac.pow(2);
                 let new_velocity = post_collision_vel + gravity * tac;
 
-                *pos = new_position;
-                *vel = new_velocity;
+                return (new_position, new_velocity);
             }
         }
 
