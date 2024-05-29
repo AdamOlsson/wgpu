@@ -260,11 +260,11 @@ mod tests {
         let circle_b_curr_velocity = Vector3::new(0.0007355814, -0.0044840397, 0.0);
         
         let res1 = continous_circle_circle_collision_detection(
-            circle_a_prev_pos, circle_a_next_pos, radius, circle_b_prev_pos, circle_b_next_pos, radius);
+            &circle_a_prev_pos, &circle_a_next_pos, radius, &circle_b_prev_pos, &circle_b_next_pos, radius);
         assert_ne!(res1, None, "Expected collision but got None");
         
         let res2 = continous_circle_circle_collision_detection(
-            circle_a_prev_pos, circle_a_curr_pos, radius, circle_b_prev_pos, circle_b_curr_pos, radius);
+            &circle_a_prev_pos, &circle_a_curr_pos, radius, &circle_b_prev_pos, &circle_b_curr_pos, radius);
         assert_ne!(res2, None, "Expected collision but got None");
         
         let ttc = res1.unwrap();

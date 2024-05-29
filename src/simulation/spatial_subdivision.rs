@@ -364,7 +364,7 @@ impl SpatialSubdivision2D {
             pass: &Vec<CollisionCell>, object_id_array: &Vec<Object>,
             positions: &mut [Vector3<f32>; 10000], velocities: &mut [Vector3<f32>; 10000],
             mass: &[f32; 10000],
-            collision_check_fn: fn(Vector3<f32>, Vector3<f32>, f32, Vector3<f32>, Vector3<f32>, f32) -> Option<f32>,
+            collision_check_fn: fn(&Vector3<f32>, &Vector3<f32>, f32, &Vector3<f32>, &Vector3<f32>, f32) -> Option<f32>,
             collision_response_fn: fn(f32, &mut Vector3<f32>, &mut Vector3<f32>, &Vector3<f32>, &Vector3<f32>, f32, f32, f32),
             radius: f32) {
         for collision in pass {
@@ -387,7 +387,7 @@ impl SpatialSubdivision2D {
                     if SpatialSubdivision2D::skip_detailed_collision_check(&a, &b, pass_num) {
                         continue;
                     }
-                    match collision_check_fn(pos_a, new_pos_a, radius, pos_b, new_pos_b, radius) {
+                    match collision_check_fn(&pos_a, &new_pos_a, radius, &pos_b, &new_pos_b, radius) {
                         Some(ttc) if -1.0 <= ttc && ttc <= 1.0  => {
                             let mut va = velocities[a.id as usize].clone();
                             let mut vb = velocities[b.id as usize].clone();
@@ -419,8 +419,8 @@ impl SpatialSubdivision2D {
             positions: &mut [Vector3<f32>; 10000],
             velocities: &mut [Vector3<f32>; 10000],
             collision_check_fn: 
-                fn( Vector3<f32>, Vector3<f32>, f32, 
-                    Vector3<f32>, Vector3<f32>, f32) -> Option<f32>,
+                fn( &Vector3<f32>, &Vector3<f32>, f32, 
+                    &Vector3<f32>, &Vector3<f32>, f32) -> Option<f32>,
             collision_response_fn: 
                 fn(ttc: f32, 
                     &mut Vector3<f32>, &mut Vector3<f32>,

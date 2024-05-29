@@ -37,8 +37,8 @@ pub(crate) fn circle_line_collision_detection(line_start: Vector3<f32>, line_sto
 /// 
 /// Returns the fraction of a timestep until a collision occurs, otherwise none.
 pub(crate) fn circle_line_segment_collision_detection(
-        line_start: Vector3<f32>, line_end: Vector3<f32>, 
-        curr_pos: Vector3<f32>, new_pos: Vector3<f32>,
+        line_start: &Vector3<f32>, line_end: &Vector3<f32>, 
+        curr_pos: &Vector3<f32>, new_pos: &Vector3<f32>,
         radius: f32) -> Option<f32> {
 
     // Intersect point is on the movement vector
@@ -46,22 +46,22 @@ pub(crate) fn circle_line_segment_collision_detection(
         line_start, line_end, curr_pos, new_pos);
     if intersect_point != None {
         let ttc = continous_circle_circle_collision_detection(
-            curr_pos, new_pos, radius, intersect_point.unwrap(), intersect_point.unwrap(), 0.0);
+            curr_pos, new_pos, radius, &intersect_point.unwrap(), &intersect_point.unwrap(), 0.0);
         return ttc;
     }
 
     let radius_sqrd = radius.powi(2);
     let point_b = closest_point_on_line_segment(line_start, line_end, new_pos);
     // b is less than r away from the movement end and on the segment
-    if point_b.distance2(new_pos) < radius_sqrd {
+    if point_b.distance2(*new_pos) < radius_sqrd {
         let ttc = continous_circle_circle_collision_detection(
-            curr_pos, new_pos, radius, point_b, point_b, 0.0);
+            curr_pos, new_pos, radius, &point_b, &point_b, 0.0);
         return ttc;
     }
 
     let point_c = closest_point_on_line_segment(curr_pos,new_pos, line_start);
     // c is less than r away from line start and on the movement vector
-    if point_c.distance2(line_start) < radius_sqrd {
+    if point_c.distance2(*line_start) < radius_sqrd {
         // We treat ends of line segments as circle with radius 0
         let ttc = continous_circle_circle_collision_detection(
             curr_pos, new_pos, radius,
@@ -71,7 +71,7 @@ pub(crate) fn circle_line_segment_collision_detection(
 
     let point_d = closest_point_on_line_segment(curr_pos,new_pos, line_end);
     // d is less than r away from line start and on the movement vector
-    if point_d.distance2(line_end) < radius_sqrd {
+    if point_d.distance2(*line_end) < radius_sqrd {
         // We treat ends of line segments as circle with radius 0
         let ttc = continous_circle_circle_collision_detection(
             curr_pos, new_pos, radius,
@@ -112,8 +112,8 @@ pub(crate) fn do_lines_intersect(start_a: [f32;3], end_a: [f32;3], start_b: [f32
 /// Returns None if the line segments are not intersecting, collinear or parallell and
 /// the intersection point if the line segments intersect.
 pub(crate) fn do_line_segments_intersect(
-        start_a: Vector3<f32>, end_a: Vector3<f32>,
-        start_b: Vector3<f32>, end_b: Vector3<f32>) -> Option<Vector3<f32>>{
+        start_a: &Vector3<f32>, end_a: &Vector3<f32>,
+        start_b: &Vector3<f32>, end_b: &Vector3<f32>) -> Option<Vector3<f32>>{
     let p = start_a;
     let r = end_a - start_a;
     let q = start_b;
@@ -160,7 +160,9 @@ pub(crate) fn closest_point_on_line(line_start: Vector3<f32>, line_end: Vector3<
 /// Compute the closest point on a line segment to a given point.
 /// 
 /// Returns the closest point on the line segment.
-pub(crate) fn closest_point_on_line_segment(line_start: Vector3<f32>, line_end: Vector3<f32>, p: Vector3<f32>) -> Vector3<f32> {
+pub(crate) fn closest_point_on_line_segment(
+    line_start: &Vector3<f32>, line_end: &Vector3<f32>, p: &Vector3<f32>
+) -> Vector3<f32> {
     let ab = line_end - line_start;
     let t = (p-line_start).dot(ab) / ab.dot(ab);
     let t_clamp = t.clamp(0.0, 1.0);
@@ -235,9 +237,9 @@ pub(crate) fn aabb_collision_detection(
 /// Returns a value between 0.0 and 1.0 representing the fraction of a timestep
 /// until the collision returns. If there is no collision, None is returned.
 pub(crate) fn continous_circle_circle_collision_detection(
-        circle_1_old_pos: Vector3<f32>, circle_1_new_pos: Vector3<f32>,
-        radius_circle_1:f32, circle_2_old_pos: Vector3<f32>,
-        circle_2_new_pos: Vector3<f32>, radius_circle_2: f32) -> Option<f32> {
+        circle_1_old_pos: &Vector3<f32>, circle_1_new_pos: &Vector3<f32>,
+        radius_circle_1:f32, circle_2_old_pos: &Vector3<f32>,
+        circle_2_new_pos: &Vector3<f32>, radius_circle_2: f32) -> Option<f32> {
     let h_old_pos = circle_1_old_pos;
     let h_new_pos = circle_1_new_pos;
     let g_old_pos = circle_2_old_pos;
@@ -252,8 +254,8 @@ pub(crate) fn continous_circle_circle_collision_detection(
         return None;
     }
 
-    let b = 2.0 * (delta_h.dot(h_old_pos) + delta_g.dot(g_old_pos) - delta_h.dot(g_old_pos) - delta_g.dot(h_old_pos));
-    let c = h_old_pos.dot(h_old_pos) + g_old_pos.dot(g_old_pos) - 2.0 * h_old_pos.dot(g_old_pos) - (radius_circle_1 + radius_circle_2).powi(2);
+    let b = 2.0 * (delta_h.dot(*h_old_pos) + delta_g.dot(*g_old_pos) - delta_h.dot(*g_old_pos) - delta_g.dot(*h_old_pos));
+    let c = h_old_pos.dot(*h_old_pos) + g_old_pos.dot(*g_old_pos) - 2.0 * h_old_pos.dot(*g_old_pos) - (radius_circle_1 + radius_circle_2).powi(2);
 
     let discriminant = b.powi(2) - 4.0 * a * c;
 
@@ -298,12 +300,12 @@ mod tests {
             let mut new_pos = [0.0, 0.100001, 0.0];
         
             let mut res = circle_line_segment_collision_detection(
-                line_start.into(), line_end.into(), curr_pos.into(), new_pos.into(), radius);
+                &line_start.into(), &line_end.into(), &curr_pos.into(), &new_pos.into(), radius);
             assert_eq!(res, None); // No collision as we move just up before we hit the line
 
             new_pos = [0.0, 0.1, 0.0];
             res = circle_line_segment_collision_detection(
-                line_start.into(), line_end.into(), curr_pos.into(), new_pos.into(), radius);
+                &line_start.into(), &line_end.into(), &curr_pos.into(), &new_pos.into(), radius);
             assert_eq!(res, None); // In this time step there is a "touch" but the movement ends there
         }
 
@@ -316,7 +318,7 @@ mod tests {
             let new_pos = [0.0, -1.0, 0.0];
         
             let res = circle_line_segment_collision_detection(
-                line_start.into(), line_end.into(), curr_pos.into(), new_pos.into(), radius);
+                &line_start.into(), &line_end.into(), &curr_pos.into(), &new_pos.into(), radius);
             assert_ne!(res, None);
             let allowed_diff = 0.0001;
             let expected = 0.45;
@@ -332,7 +334,7 @@ mod tests {
             let mut new_pos = [0.0, 0.05, 0.0];
         
             let mut res = circle_line_segment_collision_detection(
-                line_start.into(), line_end.into(), curr_pos.into(), new_pos.into(), radius);
+                &line_start.into(), &line_end.into(), &curr_pos.into(), &new_pos.into(), radius);
             assert_ne!(res, None);
             let allowed_diff = 0.0001;
             let expected = 0.95;
@@ -342,7 +344,7 @@ mod tests {
             curr_pos = [-0.5, 0.5, 0.0];
             new_pos =  [-0.05, 0.05, 0.0];
             res = circle_line_segment_collision_detection(
-                line_start.into(), line_end.into(), curr_pos.into(), new_pos.into(), radius);
+                &line_start.into(), &line_end.into(), &curr_pos.into(), &new_pos.into(), radius);
             assert_ne!(res, None);
             let allowed_diff = 0.0001;
             let expected = 0.9085;
@@ -359,7 +361,7 @@ mod tests {
             let mut new_pos = [1.0, 0.01, 0.0];
         
             let mut res = circle_line_segment_collision_detection(
-                line_start.into(), line_end.into(), curr_pos.into(), new_pos.into(), radius);
+                &line_start.into(), &line_end.into(), &curr_pos.into(), &new_pos.into(), radius);
             assert_ne!(res, None);
             let allowed_diff = 0.0001;
             let expected = 0.45025;
@@ -371,7 +373,7 @@ mod tests {
             curr_pos = [-1.0, -0.01, 0.0];
             new_pos = [1.0, -0.01, 0.0];
             res = circle_line_segment_collision_detection(
-                line_start.into(), line_end.into(), curr_pos.into(), new_pos.into(), radius);
+                &line_start.into(), &line_end.into(), &curr_pos.into(), &new_pos.into(), radius);
             assert_ne!(res, None);
             let allowed_diff = 0.0001;
             let expected = 0.45025;
@@ -390,8 +392,8 @@ mod tests {
             let mut line_b_start = [2.0, 0.0, 0.0];
             let mut line_b_end = [3.0, 0.0, 0.0];
             let mut res = do_line_segments_intersect(
-                line_a_start.into(), line_a_end.into(), 
-                         line_b_start.into(), line_b_end.into());
+                &line_a_start.into(), &line_a_end.into(), 
+                         &line_b_start.into(), &line_b_end.into());
             assert_eq!(res, None);
  
             line_a_start = [0.0, 0.0, 0.0];
@@ -399,8 +401,8 @@ mod tests {
             line_b_start = [3.0, 0.0, 0.0];
             line_b_end = [2.0, 0.0, 0.0];
             res = do_line_segments_intersect(
-                line_a_start.into(), line_a_end.into(), 
-                         line_b_start.into(), line_b_end.into());
+                &line_a_start.into(), &line_a_end.into(), 
+                         &line_b_start.into(), &line_b_end.into());
             assert_eq!(res, None);
  
             line_a_start = [0.0, 1.0, 0.0];
@@ -408,8 +410,8 @@ mod tests {
             line_b_start = [2.0, 3.0, 0.0];
             line_b_end = [3.0, 4.0, 0.0];
             res = do_line_segments_intersect(
-                line_a_start.into(), line_a_end.into(), 
-                         line_b_start.into(), line_b_end.into());
+                &line_a_start.into(), &line_a_end.into(), 
+                         &line_b_start.into(), &line_b_end.into());
             assert_eq!(res, None);
         
         }
@@ -421,8 +423,8 @@ mod tests {
             let mut line_b_start = [-1.0, 1.0, 0.0];
             let mut line_b_end = [-1.0, -1.0, 0.0];
             let mut res = do_line_segments_intersect(
-                line_a_start.into(), line_a_end.into(), 
-                         line_b_start.into(), line_b_end.into());
+                &line_a_start.into(), &line_a_end.into(), 
+                         &line_b_start.into(), &line_b_end.into());
             assert_eq!(res, None);
             
             line_a_start = [0.0, 0.0, 0.0];
@@ -430,8 +432,8 @@ mod tests {
             line_b_start = [-1.0, -1.0, 0.0];
             line_b_end = [-1.0, 1.0, 0.0];
             res = do_line_segments_intersect(
-                line_a_start.into(), line_a_end.into(), 
-                         line_b_start.into(), line_b_end.into());
+                &line_a_start.into(), &line_a_end.into(), 
+                         &line_b_start.into(), &line_b_end.into());
             assert_eq!(res, None);
  
             line_a_start = [0.0, 0.0, 0.0];
@@ -439,8 +441,8 @@ mod tests {
             line_b_start = [0.0, 2.0, 0.0];
             line_b_end = [0.0, 1.0, 0.0];
             res = do_line_segments_intersect(
-                line_a_start.into(), line_a_end.into(), 
-                         line_b_start.into(), line_b_end.into());
+                &line_a_start.into(), &line_a_end.into(), 
+                         &line_b_start.into(), &line_b_end.into());
             assert_eq!(res, None);
         }
 
@@ -451,8 +453,8 @@ mod tests {
             let mut line_b_start = [0.0, 1.0, 0.0];
             let mut line_b_end = [0.0, -1.0, 0.0];
             let mut res = do_line_segments_intersect(
-                line_a_start.into(), line_a_end.into(), 
-                         line_b_start.into(), line_b_end.into());
+                &line_a_start.into(), &line_a_end.into(), 
+                         &line_b_start.into(), &line_b_end.into());
             assert_eq!(res, Some(Vector3::new(0.0,0.0,0.0)));
             
             line_a_start = [0.0, 1.0, 0.0];
@@ -460,8 +462,8 @@ mod tests {
             line_b_start = [1.0, 0.0, 0.0];
             line_b_end = [-1.0, 0.0, 0.0];
             res = do_line_segments_intersect(
-                line_a_start.into(), line_a_end.into(), 
-                         line_b_start.into(), line_b_end.into());
+                &line_a_start.into(), &line_a_end.into(), 
+                         &line_b_start.into(), &line_b_end.into());
             assert_eq!(res, Some(Vector3::new(0.0,0.0,0.0)));
 
             line_a_start = [-1.0, -1.0, 0.0];
@@ -469,8 +471,8 @@ mod tests {
             line_b_start = [-1.0, 1.0, 0.0];
             line_b_end = [1.0, -1.0, 0.0];
             res = do_line_segments_intersect(
-                line_a_start.into(), line_a_end.into(), 
-                         line_b_start.into(), line_b_end.into());
+                &line_a_start.into(), &line_a_end.into(), 
+                         &line_b_start.into(), &line_b_end.into());
             assert_eq!(res, Some(Vector3::new(0.0,0.0,0.0)));
 
             line_a_start = [0.0, 0.0, 0.0];
@@ -478,8 +480,8 @@ mod tests {
             line_b_start = [0.75, 1.0, 0.0];
             line_b_end = [0.75, -1.0, 0.0];
             res = do_line_segments_intersect(
-                line_a_start.into(), line_a_end.into(), 
-                         line_b_start.into(), line_b_end.into());
+                &line_a_start.into(), &line_a_end.into(), 
+                         &line_b_start.into(), &line_b_end.into());
             assert_eq!(res, Some(Vector3::new(0.75,0.0,0.0)));
 
 
@@ -626,7 +628,7 @@ mod tests {
             let line_end = Vector3::new(1.0, 0.0, 0.0);
             let p = Vector3::new(0.0, 1.0, 0.0);
             let expected_result = Vector3::new(0.0, 0.0, 0.0);
-            let res = closest_point_on_line_segment(line_start, line_end, p);
+            let res = closest_point_on_line_segment(&line_start, &line_end, &p);
             assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res);
         }
  
@@ -636,7 +638,7 @@ mod tests {
             let line_end = Vector3::new(1.0, 0.0, 0.0);
             let p = Vector3::new(2.0, 0.0, 0.0);
             let expected_result = Vector3::new(1.0, 0.0, 0.0);
-            let res = closest_point_on_line_segment(line_start, line_end, p);
+            let res = closest_point_on_line_segment(&line_start, &line_end, &p);
             assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res);
         }
     }
@@ -713,7 +715,7 @@ mod tests {
             let circle_2_new_pos = Vector3::new(-0.3, 0.0, 0.0);
             let expected_result: Option<f32> = None;
             let res = continous_circle_circle_collision_detection(
-                circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
+                &circle_1_old_pos, &circle_1_new_pos, radius, &circle_2_old_pos, &circle_2_new_pos, radius);
             assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res);
         }
     
@@ -727,7 +729,7 @@ mod tests {
             let expected_result = 0.5;
             let epsilon: f32 = 0.0001;
             let res = continous_circle_circle_collision_detection(
-                circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
+                &circle_1_old_pos, &circle_1_new_pos, radius, &circle_2_old_pos, &circle_2_new_pos, radius);
             assert_ne!(res, None, "Expected collision but got None");
             let diff = res.unwrap() - expected_result;
             assert!(diff.abs() < epsilon, "Expected {:?} but got {:?}", expected_result, res.unwrap());
@@ -743,7 +745,7 @@ mod tests {
             let expected_result = 0.5;
             let epsilon: f32 = 0.0001;
             let res = continous_circle_circle_collision_detection(
-                circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
+                &circle_1_old_pos, &circle_1_new_pos, radius, &circle_2_old_pos, &circle_2_new_pos, radius);
             assert_ne!(res, None, "Expected collision but got None");
             let diff = res.unwrap() - expected_result;
             assert!(diff.abs() < epsilon, "Expected {:?} but got {:?}", expected_result, res.unwrap());
@@ -758,7 +760,7 @@ mod tests {
             let circle_2_new_pos = Vector3::new(0.15, 0.0, 0.0);
             let expected_result: Option<f32> = None;
             let res = continous_circle_circle_collision_detection(
-                circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
+                &circle_1_old_pos, &circle_1_new_pos, radius, &circle_2_old_pos, &circle_2_new_pos, radius);
             assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res);
         }
     
@@ -772,7 +774,7 @@ mod tests {
             let expected_result = 0.5;
             let epsilon: f32 = 0.0001;
             let res = continous_circle_circle_collision_detection(
-                circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
+                &circle_1_old_pos, &circle_1_new_pos, radius, &circle_2_old_pos, &circle_2_new_pos, radius);
             assert_ne!(res, None, "Expected collision but got None");
             let diff = res.unwrap() - expected_result;
             assert!(diff.abs() < epsilon, "Expected {:?} but got {:?}", expected_result, res.unwrap());
@@ -788,7 +790,7 @@ mod tests {
             let expected_result = 0.5;
             let epsilon: f32 = 0.0001;
             let res = continous_circle_circle_collision_detection(
-                circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
+                &circle_1_old_pos, &circle_1_new_pos, radius, &circle_2_old_pos, &circle_2_new_pos, radius);
             assert_ne!(res, None, "Expected collision but got None");
             let diff = res.unwrap() - expected_result;
             assert!(diff.abs() < epsilon, "Expected {:?} but got {:?}", expected_result, res.unwrap());
@@ -804,7 +806,7 @@ mod tests {
             let expected_result = 0.5;
             let epsilon: f32 = 0.0001;
             let res = continous_circle_circle_collision_detection(
-                circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
+                &circle_1_old_pos, &circle_1_new_pos, radius, &circle_2_old_pos, &circle_2_new_pos, radius);
             assert_ne!(res, None, "Expected collision but got None");
             let diff = res.unwrap() - expected_result;
             assert!(diff.abs() < epsilon, "Expected {:?} but got {:?}", expected_result, res.unwrap());
@@ -819,7 +821,7 @@ mod tests {
             let circle_2_new_pos = Vector3::new(0.5, 0.0, 0.0);
             let expected_result = None;
             let res = continous_circle_circle_collision_detection(
-                circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
+                &circle_1_old_pos, &circle_1_new_pos, radius, &circle_2_old_pos, &circle_2_new_pos, radius);
             assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res.unwrap());
         }
     
@@ -832,7 +834,7 @@ mod tests {
             let circle_2_new_pos = Vector3::new(0.5, 0.0, 0.0);
             let expected_result = None;
             let res = continous_circle_circle_collision_detection(
-                circle_1_old_pos, circle_1_new_pos, radius, circle_2_old_pos, circle_2_new_pos, radius);
+                &circle_1_old_pos, &circle_1_new_pos, radius, &circle_2_old_pos, &circle_2_new_pos, radius);
             assert_eq!(res, expected_result, "Expected {:?} but got {:?}", expected_result, res.unwrap());
         }
     }

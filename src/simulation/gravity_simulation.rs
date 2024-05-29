@@ -59,46 +59,64 @@ impl GravitySimulation {
         // Accelerate due to gravity
         let gravity_vector = self.g * timestep;
         for i in 0..self.num_indices as usize {
-            let vel = self.velocities[i];
-            let pos = self.positions[i];
+            let mut pos = self.positions[i];
+            let mut vel = self.velocities[i];
             let predicted_vel =  vel + gravity_vector;
             let predicted_pos = pos + predicted_vel * timestep; 
+    
+            Self::border_collision_detection_and_resolution(
+                &mut pos, &predicted_pos,
+                &mut vel, &predicted_vel,
+                self.radius, timestep, &self.g);
+            
+            self.positions[i] = pos;
+            self.velocities[i] = vel;
+        }
+    }
 
-            // Check for collision with bottom boundary
-            let bottom_left_corner = Vector3::new(-1.0, -1.0, 0.0);
-            let bottom_right_corner = Vector3::new(2.0, -1.0, 0.0);
-            match circle_line_segment_collision_detection(bottom_left_corner, bottom_right_corner, pos, predicted_pos, self.radius) {
-                None =>  {
-                    self.positions[i] = predicted_pos;
-                    self.velocities[i] = predicted_vel;
-                },
-                Some(fraction) => {
 
-                    if -VELOCITY_ZERO_THRESH < self.velocities[i].y && self.velocities[i].y < VELOCITY_ZERO_THRESH {
-                        self.velocities[i].y = 0.0;
-                        continue;
-                    } 
-                    // https://www.gamedev.net/forums/topic/571402-ball-never-stops-bouncing/4651063/
-                    let ttc = timestep*fraction;
-                    // Compute pre-collision state, velocity and position
-                    let pre_collision_point = self.positions[i] + self.velocities[i]*ttc + 0.5*self.g*ttc.pow(2);
-                    let pre_collision_vel = self.velocities[i] + self.g*ttc;
-                    
-                    // Perform collision response
-                    let crf = Self::nonlinear_crf(
-                        f32::abs(pre_collision_vel.y), 0.85, 0.03, 0.7);
+    fn border_collision_detection_and_resolution(
+        pos: &mut Vector3<f32>, pred_pos: &Vector3<f32>,
+        vel:  &mut Vector3<f32>, pred_vel: &Vector3<f32>,
+        radius: f32, timestep: f32, gravity: &Vector3<f32>
+    ) {
+        // Check for collision with bottom boundary
+        let bottom_left_corner = Vector3::new(-1.0, -1.0, 0.0);
+        let bottom_right_corner = Vector3::new(2.0, -1.0, 0.0);
+        match circle_line_segment_collision_detection(
+                &bottom_left_corner, &bottom_right_corner,
+                    pos, pred_pos, radius) {
+            None =>  {
+                *pos = *pred_pos;
+                *vel = *pred_vel;
+            },
+            Some(fraction) => {
 
-                    let post_collision_vel = self.velocities[i].mul_element_wise(Vector3::new(0.0, -crf, 0.0));
-                    
-                    // Compute post collision state
-                    let tac = timestep - ttc; // Time After Collision
-                    let new_position = pre_collision_point + post_collision_vel*tac + 0.5 * self.g*tac.pow(2);
-                    let new_velocity = post_collision_vel + self.g * tac;
+                if -VELOCITY_ZERO_THRESH < vel.y && vel.y < VELOCITY_ZERO_THRESH {
+                    vel.y = 0.0;
+                    return; // TODO: Might not be right. Consider a ball rolling and hitting a vertical boundary
+                } 
+                // https://www.gamedev.net/forums/topic/571402-ball-never-stops-bouncing/4651063/
+                let ttc = timestep*fraction;
+                // Compute pre-collision state, velocity and position
+                let pre_collision_point = *pos + (*vel)*ttc + 0.5*gravity*ttc.pow(2);
+                let pre_collision_vel = *vel + gravity*ttc;
+                
+                // Perform collision response
+                let crf = Self::nonlinear_crf(
+                    f32::abs(pre_collision_vel.y), 0.85, 0.03, 0.7);
 
-                    self.positions[i] = new_position;
-                    self.velocities[i] = new_velocity;
-                }
+                let post_collision_vel = vel.mul_element_wise(Vector3::new(0.0, -crf, 0.0));
+                
+                // Compute post collision state
+                let tac = timestep - ttc; // Time After Collision
+                let new_position = pre_collision_point + post_collision_vel*tac + 0.5 * gravity*tac.pow(2);
+                let new_velocity = post_collision_vel + gravity * tac;
+
+                *pos = new_position;
+                *vel = new_velocity;
             }
         }
+
     }
 }
