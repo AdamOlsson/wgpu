@@ -7,7 +7,7 @@ mod state;
 mod simulation;
 
 
-use std::time::Instant;
+use std::{thread, time::Instant};
 
 use winit::{
     dpi::PhysicalSize, event::*, event_loop::EventLoopBuilder, keyboard::{KeyCode, PhysicalKey}, window::WindowBuilder
@@ -29,6 +29,7 @@ async fn run() {
     let mut state = state::State::new(&window).await;
 
     std::thread::spawn(move || loop {
+        //thread::sleep(std::time::Duration::from_millis(100));
         event_loop_proxy.send_event(CustomEvent::Timer).ok();
     });
 

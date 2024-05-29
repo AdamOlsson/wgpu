@@ -7,7 +7,7 @@ use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
 
 use super::util::{collision_detection::{circle_line_segment_collision_detection, do_line_segments_intersect}, collision_response::circle_circle_collision_response, generate_initial_positions_square_grid, generate_random_colors, MAX_INSTANCES};
 
-
+const VELOCITY_ZERO_THRESH: f32 = 0.0001;
 pub struct GravitySimulation {
     pub positions: [Vector3<f32>; MAX_INSTANCES],
     pub colors: [Vector3<f32>; MAX_INSTANCES],
@@ -57,18 +57,27 @@ impl GravitySimulation {
         self.timestamp = now;
 
         // Accelerate due to gravity
-        let g_vector = self.g * timestep;
+        let gravity_vector = self.g * timestep;
         for i in 0..self.num_indices as usize {
-            self.velocities[i] += g_vector;
-            
+            let vel = self.velocities[i];
+            let pos = self.positions[i];
+            let predicted_vel =  vel + gravity_vector;
+            let predicted_pos = pos + predicted_vel * timestep; 
+
             // Check for collision with bottom boundary
             let bottom_left_corner = Vector3::new(-1.0, -1.0, 0.0);
             let bottom_right_corner = Vector3::new(2.0, -1.0, 0.0);
-            let pos = self.positions[i];
-            let predicted_pos = pos + self.velocities[i] * timestep; 
             match circle_line_segment_collision_detection(bottom_left_corner, bottom_right_corner, pos, predicted_pos, self.radius) {
-                None => self.positions[i] += self.velocities[i] * timestep,
+                None =>  {
+                    self.positions[i] = predicted_pos;
+                    self.velocities[i] = predicted_vel;
+                },
                 Some(fraction) => {
+
+                    if -VELOCITY_ZERO_THRESH < self.velocities[i].y && self.velocities[i].y < VELOCITY_ZERO_THRESH {
+                        self.velocities[i].y = 0.0;
+                        continue;
+                    } 
                     // https://www.gamedev.net/forums/topic/571402-ball-never-stops-bouncing/4651063/
                     let ttc = timestep*fraction;
                     // Compute pre-collision state, velocity and position
@@ -85,13 +94,11 @@ impl GravitySimulation {
                     let tac = timestep - ttc; // Time After Collision
                     let new_position = pre_collision_point + post_collision_vel*tac + 0.5 * self.g*tac.pow(2);
                     let new_velocity = post_collision_vel + self.g * tac;
-                    
+
                     self.positions[i] = new_position;
                     self.velocities[i] = new_velocity;
                 }
             }
-            
         }
-        
     }
 }
