@@ -1,3 +1,4 @@
+use core::time;
 use std::time::Instant;
 use cgmath::{num_traits::Pow, ElementWise, Vector3};
 use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
@@ -83,12 +84,14 @@ impl GravitySimulation {
                 continue
             }
 
+            let ttc = frac_to_collision*timestep; // Time to collision
+            let tac = timestep - ttc; // Time after collisiom
             let (new_pos , new_vel);
             match border_idx {
-                BOTTOM_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel, timestep, &self.g, frac_to_collision, Y_AXIS),
-                LEFT_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel, timestep, &self.g, frac_to_collision, X_AXIS),
-                RIGHT_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel, timestep, &self.g, frac_to_collision, X_AXIS),
-                TOP_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel, timestep, &self.g, frac_to_collision, Y_AXIS),
+                BOTTOM_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel,&self.g, ttc, tac,Y_AXIS),
+                LEFT_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel, &self.g, ttc, tac,X_AXIS),
+                RIGHT_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel,&self.g, ttc, tac, X_AXIS),
+                TOP_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel, &self.g, ttc, tac, Y_AXIS),
                 _ => panic!("You should not be here!")
             }
             
@@ -98,12 +101,10 @@ impl GravitySimulation {
     }
 
     fn circle_border_collision(
-        pos: &Vector3<f32>, vel:  &Vector3<f32>,
-        timestep: f32, gravity: &Vector3<f32>,
-        fraction: f32, reverse_dim: u8 
+        pos: &Vector3<f32>, vel:  &Vector3<f32>, gravity: &Vector3<f32>,
+        ttc: f32, tac: f32, reverse_dim: u8 
     ) -> (Vector3<f32>, Vector3<f32>) {
         // https://www.gamedev.net/forums/topic/571402-ball-never-stops-bouncing/4651063/
-        let ttc = timestep*fraction;
         // Compute pre-collision state, velocity and position
         let pre_collision_point = *pos + vel*ttc + 0.5*gravity*ttc.pow(2);
         let pre_collision_vel = vel + gravity*ttc;
@@ -114,7 +115,6 @@ impl GravitySimulation {
         direction[reverse_dim as usize] = -crf;
         let post_collision_vel = vel.mul_element_wise(direction);
         // Compute post collision state
-        let tac = timestep - ttc; // Time After Collision
         let new_position = pre_collision_point + post_collision_vel*tac + 0.5 * gravity*tac.pow(2);
         let new_velocity = post_collision_vel + gravity * tac;
         return (new_position, new_velocity); 
