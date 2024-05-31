@@ -1,19 +1,20 @@
-use core::time;
 use std::time::Instant;
-
-use cgmath::{num_traits::Pow, ElementWise, InnerSpace, MetricSpace, Vector3};
-
-
+use cgmath::{num_traits::Pow, ElementWise, Vector3};
 use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
+use super::util::{collision_detection::circle_line_segment_collision_detection, generate_random_colors, MAX_INSTANCES};
 
-use super::util::{collision_detection::{circle_line_segment_collision_detection, do_line_segments_intersect}, collision_response::circle_circle_collision_response, generate_initial_positions_square_grid, generate_random_colors, MAX_INSTANCES};
+const BOTTOM_IDX: u8 = 0;
+const LEFT_IDX: u8 = 1;
+const RIGHT_IDX: u8 = 2;
+const TOP_IDX: u8 = 3;
 
-const VELOCITY_ZERO_THRESH: f32 = 0.0001;
+const X_AXIS: u8 = 0;
+const Y_AXIS: u8 = 1;
 
-const BOTTOM_IDX: usize = 0;
-const LEFT_IDX: usize = 1;
-const RIGHT_IDX: usize = 2;
-const TOP_IDX: usize = 3;
+const BOTTOM_LEFT_CORNER: Vector3<f32> = Vector3::new(-1.0, -1.0, 0.0);
+const BOTTOM_RIGHT_CORNER: Vector3<f32> = Vector3::new(1.0, -1.0, 0.0);
+const TOP_RIGHT_CORNER: Vector3<f32>= Vector3::new(1.0, 1.0, 0.0);
+const TOP_LEFT_CORNER: Vector3<f32> = Vector3::new(-1.0, 1.0, 0.0);
 
 pub struct GravitySimulation {
     pub positions: [Vector3<f32>; MAX_INSTANCES],
@@ -74,7 +75,7 @@ impl GravitySimulation {
             // Perform initial collision detection and response 
             let (border_idx, frac_to_collision) = Self::circle_border_collision_detection(
                 &pos, &predicted_pos, self.radius);
-            
+
             if border_idx == u8::MAX {
                 // No collision
                 self.positions[i] = predicted_pos;
@@ -82,21 +83,24 @@ impl GravitySimulation {
                 continue
             }
 
-            let (new_pos, new_vel) = Self::circle_border_collision_response(
-                &pos, &vel, &predicted_vel, timestep, &self.g, frac_to_collision, border_idx
-            );
+            let (new_pos , new_vel);
+            match border_idx {
+                BOTTOM_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel, timestep, &self.g, frac_to_collision, Y_AXIS),
+                LEFT_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel, timestep, &self.g, frac_to_collision, X_AXIS),
+                RIGHT_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel, timestep, &self.g, frac_to_collision, X_AXIS),
+                TOP_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel, timestep, &self.g, frac_to_collision, Y_AXIS),
+                _ => panic!("You should not be here!")
+            }
             
             self.positions[i] = new_pos;
             self.velocities[i] = new_vel;
         }
-        
-        // 
     }
 
     fn circle_border_collision(
         pos: &Vector3<f32>, vel:  &Vector3<f32>,
         timestep: f32, gravity: &Vector3<f32>,
-        fraction: f32, reverse_dim: usize 
+        fraction: f32, reverse_dim: u8 
     ) -> (Vector3<f32>, Vector3<f32>) {
         // https://www.gamedev.net/forums/topic/571402-ball-never-stops-bouncing/4651063/
         let ttc = timestep*fraction;
@@ -107,7 +111,7 @@ impl GravitySimulation {
         let crf = Self::nonlinear_crf(
             f32::abs(pre_collision_vel.y), 0.85, 0.03, 0.7);
         let mut direction = Vector3::new(1.0, 1.0, 1.0);
-        direction[reverse_dim] = -crf;
+        direction[reverse_dim as usize] = -crf;
         let post_collision_vel = vel.mul_element_wise(direction);
         // Compute post collision state
         let tac = timestep - ttc; // Time After Collision
@@ -117,92 +121,78 @@ impl GravitySimulation {
     }
 
 
-    // FIXME: Optimize by not checking the opposite border if the current border collides
+    /// Detects collision with any of the 4 borders.
+    /// 
+    /// Returns the index of the earliest border the circle collides with and the
+    /// fraction of the timestep until collision occures, if there is a collision
+    /// otherwise u8 max and 99.0.
     fn circle_border_collision_detection(
         pos: &Vector3<f32>, pred_pos: &Vector3<f32>, radius: f32
     ) -> (u8, f32) {
-        let bottom_left_corner = Vector3::new(-1.0, -1.0, 0.0);
-        let bottom_right_corner = Vector3::new(1.0, -1.0, 0.0);
-        let top_right_corner = Vector3::new(1.0, 1.0, 0.0);
-        let top_left_corner = Vector3::new(-1.0, 1.0, 0.0);
-
-        let mut min_value = 99.0;
-        let mut min_idx = u8::MAX;
-    
         // Check for collision with bottom boundary
         match circle_line_segment_collision_detection(
-                &bottom_left_corner, &bottom_right_corner,
+                &BOTTOM_LEFT_CORNER, &BOTTOM_RIGHT_CORNER,
                     pos, pred_pos, radius) {
             None => (), 
-            Some(fraction) => {
-                if fraction < min_value {
-                    min_value = fraction;
-                    min_idx = 0;
-                }    
-            }
-        }
-
-        // Check for collision with right boundary
-        match circle_line_segment_collision_detection(
-                &top_right_corner, &bottom_right_corner,
+            Some(fraction_bottom) => 
+                // Check for collision with right boundary
+                match circle_line_segment_collision_detection(
+                    &TOP_RIGHT_CORNER, &BOTTOM_RIGHT_CORNER,
                     pos, pred_pos, radius) {
-            None => (), 
-            Some(fraction) => {
-                if fraction < min_value {
-                    min_value = fraction;
-                    min_idx = 0;
-                }    
-            }
-        }
- 
-        // Check for collision with left boundary
-        match circle_line_segment_collision_detection(
-                &top_left_corner, &bottom_left_corner,
-                    pos, pred_pos, radius) {
-            None => (), 
-            Some(fraction) => {
-                if fraction < min_value {
-                    min_value = fraction;
-                    min_idx = 0;
-                }    
-            }
-        }
+                    Some(fraction_right) =>
+                        if fraction_bottom < fraction_right {
+                            return (BOTTOM_IDX, fraction_bottom)
+                        } else {
+                            return (RIGHT_IDX, fraction_right)
+                        },
+                    None => 
+                        // Check for collision with left boundary
+                        match circle_line_segment_collision_detection(
+                            &TOP_LEFT_CORNER, &BOTTOM_LEFT_CORNER,
+                            pos, pred_pos, radius) {
+                            None => return (BOTTOM_IDX, fraction_bottom), 
+                            Some(fraction_left) => 
+                                if fraction_bottom < fraction_left {
+                                    return (BOTTOM_IDX, fraction_bottom)
+                                } else {
+                                    return (LEFT_IDX, fraction_left)
+                                },
+                        },
+                }
+        } 
 
         // Check for collision with top boundary
         match circle_line_segment_collision_detection(
-                &top_left_corner, &bottom_left_corner,
-                    pos, pred_pos, radius) {
+            &TOP_LEFT_CORNER, &TOP_RIGHT_CORNER,
+                pos, pred_pos, radius) {
             None => (), 
-            Some(fraction) => {
-                if fraction < min_value {
-                    min_value = fraction;
-                    min_idx = 0;
-                }    
-            }
-       }
-        return (min_idx, min_value);
+            Some(fraction_top) => 
+                // Check for collision with right boundary
+                match circle_line_segment_collision_detection(
+                    &TOP_RIGHT_CORNER, &BOTTOM_RIGHT_CORNER,
+                    pos, pred_pos, radius) {
+                    Some(fraction_right) =>
+                        if fraction_top < fraction_right {
+                            return (TOP_IDX, fraction_top)
+                        } else {
+                            return (RIGHT_IDX, fraction_right)
+                        },
+                    None => 
+                        // Check for collision with left boundary
+                        match circle_line_segment_collision_detection(
+                            &TOP_LEFT_CORNER, &BOTTOM_LEFT_CORNER,
+                            pos, pred_pos, radius) {
+                            None => return (TOP_IDX, fraction_top), 
+                            Some(fraction_left) => 
+                                if fraction_top < fraction_left {
+                                    return (TOP_IDX, fraction_top)
+                                } else {
+                                    return (LEFT_IDX, fraction_left)
+                                },
+                        },
+                }
+        } 
+        return (u8::MAX, 99.0);
     }
 
-    fn circle_border_collision_response(
-        pos: &Vector3<f32>, 
-        vel:  &Vector3<f32>, pred_vel: &Vector3<f32>,
-        timestep: f32, gravity: &Vector3<f32>,
-        fraction: f32, border_idx: u8 
-    ) -> (Vector3<f32>, Vector3<f32>){
-        
-        match border_idx {
-            0 => {
-                if -VELOCITY_ZERO_THRESH < vel.y && vel.y < VELOCITY_ZERO_THRESH {
-                    let new_vel = Vector3::new(pred_vel.x, 0.0, pred_vel.z);
-                    let new_pos = pos + new_vel;
-                    return (new_pos, new_vel); 
-                } 
-                return Self::circle_border_collision(pos, vel, timestep, gravity, fraction, 1); 
-            }
-            1 => Self::circle_border_collision(pos, vel, timestep, gravity, fraction, 0),
-            2 => Self::circle_border_collision(pos, vel, timestep, gravity, fraction, 0),
-            3 => Self::circle_border_collision(pos, vel, timestep, gravity, fraction, 1),
-            _ => panic!("You should not be here!")
-        }
-    }
 }
