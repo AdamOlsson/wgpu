@@ -39,9 +39,9 @@ impl GravitySimulation {
         let num_instances: u32 = 1;
 
         //let positions = generate_initial_positions_square_grid(num_instances, radius);
-        let mut positions = [Vector3::new(0.0,0.8,0.0); MAX_INSTANCES];
+        let mut positions = [Vector3::new(0.0,0.0,0.0); MAX_INSTANCES];
         
-        let velocities = [Vector3::new(0.0, 0.0, 0.0); MAX_INSTANCES];
+        let velocities = [Vector3::new(2.0, 0.0, 0.0); MAX_INSTANCES];
 
         let colors = generate_random_colors();
         let mass = [1.0; MAX_INSTANCES];
@@ -94,9 +94,40 @@ impl GravitySimulation {
                 TOP_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel, &self.g, ttc, tac, Y_AXIS),
                 _ => panic!("You should not be here!")
             }
+
+            // Perform collision detection on new position
+            {
+                let timestep = tac;
+                let pos = new_pos;
+                let vel = new_vel;
+                let predicted_vel =  vel + self.g*timestep;
+                let predicted_pos = pos + vel * timestep + 0.5*self.g*timestep.pow(2); 
             
-            self.positions[i] = new_pos;
-            self.velocities[i] = new_vel;
+                // Perform initial collision detection and response 
+                let (border_idx, frac_to_collision) = Self::circle_border_collision_detection(
+                    &pos, &predicted_pos, self.radius);
+
+                if border_idx == u8::MAX {
+                    // No collision
+                    self.positions[i] = predicted_pos;
+                    self.velocities[i] = predicted_vel; 
+                    continue
+                }
+
+                let ttc = frac_to_collision*timestep; // Time to collision
+                let tac = timestep - ttc; // Time after collisiom
+                let (new_pos , new_vel);
+                match border_idx {
+                    BOTTOM_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel,&self.g, ttc, tac,Y_AXIS),
+                    LEFT_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel, &self.g, ttc, tac,X_AXIS),
+                    RIGHT_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel,&self.g, ttc, tac, X_AXIS),
+                    TOP_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel, &self.g, ttc, tac, Y_AXIS),
+                    _ => panic!("You should not be here!")
+                };
+
+                self.positions[i] = new_pos;
+                self.velocities[i] = new_vel; 
+            }
         }
     }
 
@@ -122,7 +153,11 @@ impl GravitySimulation {
 
 
     /// Detects collision with any of the 4 borders.
-    /// 
+    ///
+    /// The function is optmized to only evaluate 3 borders and make use of the fact
+    /// that if a collision occurs the a border, there is no need to check for collision
+    /// with the opposite border.
+    ///  
     /// Returns the index of the earliest border the circle collides with and the
     /// fraction of the timestep until collision occures, if there is a collision
     /// otherwise u8 max and 99.0.
@@ -188,6 +223,70 @@ impl GravitySimulation {
                                     return (TOP_IDX, fraction_top)
                                 } else {
                                     return (LEFT_IDX, fraction_left)
+                                },
+                        },
+                }
+        } 
+
+        // Check for collision with right boundary
+        match circle_line_segment_collision_detection(
+            &TOP_RIGHT_CORNER, &BOTTOM_RIGHT_CORNER,
+                pos, pred_pos, radius) {
+            None => (), 
+            Some(fraction_right) => 
+                // Check for collision with top boundary
+                match circle_line_segment_collision_detection(
+                    &TOP_LEFT_CORNER, &TOP_RIGHT_CORNER,
+                    pos, pred_pos, radius) {
+                    Some(fraction_top) =>
+                        if fraction_right < fraction_top {
+                            return (RIGHT_IDX, fraction_right)
+                        } else {
+                            return (TOP_IDX, fraction_top)
+                        },
+                    None => 
+                        // Check for collision with bottom boundary
+                        match circle_line_segment_collision_detection(
+                                &BOTTOM_LEFT_CORNER, &BOTTOM_RIGHT_CORNER,
+                                pos, pred_pos, radius) {
+                            None => return (RIGHT_IDX, fraction_right), 
+                            Some(fraction_bottom) => 
+                                if fraction_right < fraction_bottom {
+                                    return (RIGHT_IDX, fraction_right)
+                                } else {
+                                    return (BOTTOM_IDX, fraction_bottom)
+                                },
+                        },
+                }
+        } 
+
+        // Check for collision with left boundary
+        match circle_line_segment_collision_detection(
+            &TOP_LEFT_CORNER, &BOTTOM_LEFT_CORNER,
+                pos, pred_pos, radius) {
+            None => (), 
+            Some(fraction_left) => 
+                // Check for collision with top boundary
+                match circle_line_segment_collision_detection(
+                        &TOP_LEFT_CORNER, &TOP_RIGHT_CORNER,
+                        pos, pred_pos, radius) {
+                    Some(fraction_top) =>
+                        if fraction_left < fraction_top {
+                            return (LEFT_IDX, fraction_left)
+                        } else {
+                            return (TOP_IDX, fraction_top)
+                        },
+                    None => 
+                        // Check for collision with bottom boundary
+                        match circle_line_segment_collision_detection(
+                                &BOTTOM_LEFT_CORNER, &BOTTOM_RIGHT_CORNER,
+                                pos, pred_pos, radius) {
+                            None => return (LEFT_IDX, fraction_left), 
+                            Some(fraction_bottom) => 
+                                if fraction_left < fraction_bottom {
+                                    return (LEFT_IDX, fraction_left)
+                                } else {
+                                    return (BOTTOM_IDX, fraction_bottom)
                                 },
                         },
                 }
