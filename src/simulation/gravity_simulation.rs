@@ -1,4 +1,4 @@
-use core::time;
+use core::panic;
 use std::time::Instant;
 use cgmath::{num_traits::Pow, ElementWise, Vector3};
 use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
@@ -16,6 +16,8 @@ const BOTTOM_LEFT_CORNER: Vector3<f32> = Vector3::new(-1.0, -1.0, 0.0);
 const BOTTOM_RIGHT_CORNER: Vector3<f32> = Vector3::new(1.0, -1.0, 0.0);
 const TOP_RIGHT_CORNER: Vector3<f32>= Vector3::new(1.0, 1.0, 0.0);
 const TOP_LEFT_CORNER: Vector3<f32> = Vector3::new(-1.0, 1.0, 0.0);
+
+const ZERO_VELOCITY_THRESHOLD: f32 = 0.1;
 
 pub struct GravitySimulation {
     pub positions: [Vector3<f32>; MAX_INSTANCES],
@@ -66,8 +68,7 @@ impl GravitySimulation {
         let timestep = (now - self.timestamp).as_millis() as f32 / 1000.0;
         self.timestamp = now;
 
-        // Initial collision detection and response
-        for i in 0..self.num_indices as usize {
+        for i in 0..self.num_instances as usize {
             let pos = self.positions[i];
             let vel = self.velocities[i];
             let predicted_vel =  vel + self.g*timestep;
@@ -88,20 +89,20 @@ impl GravitySimulation {
             let tac = timestep - ttc; // Time after collisiom
             let (new_pos , new_vel);
             match border_idx {
-                BOTTOM_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel,&self.g, ttc, tac,Y_AXIS),
-                LEFT_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel, &self.g, ttc, tac,X_AXIS),
-                RIGHT_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel,&self.g, ttc, tac, X_AXIS),
-                TOP_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel, &self.g, ttc, tac, Y_AXIS),
+                BOTTOM_IDX => (new_pos, new_vel) = Self::elastic_circle_border_collision(&pos, &vel,&self.g, ttc, tac,Y_AXIS),
+                LEFT_IDX => (new_pos, new_vel) = Self::elastic_circle_border_collision(&pos, &vel, &self.g, ttc, tac,X_AXIS),
+                RIGHT_IDX => (new_pos, new_vel) = Self::elastic_circle_border_collision(&pos, &vel,&self.g, ttc, tac, X_AXIS),
+                TOP_IDX => (new_pos, new_vel) = Self::elastic_circle_border_collision(&pos, &vel, &self.g, ttc, tac, Y_AXIS),
                 _ => panic!("You should not be here!")
             }
 
-            // Perform collision detection on new position
-            {
+            { // Second collision response
                 let timestep = tac;
-                let pos = new_pos;
-                let vel = new_vel;
-                let predicted_vel =  vel + self.g*timestep;
-                let predicted_pos = pos + vel * timestep + 0.5*self.g*timestep.pow(2); 
+                let vel = new_vel - self.g*tac; 
+                let pos = new_pos - vel*tac - 0.5*self.g*tac.pow(2);
+
+                //let predicted_vel = new_vel; 
+                let predicted_pos = new_pos;
             
                 // Perform initial collision detection and response 
                 let (border_idx, frac_to_collision) = Self::circle_border_collision_detection(
@@ -109,48 +110,53 @@ impl GravitySimulation {
 
                 if border_idx == u8::MAX {
                     // No collision
-                    self.positions[i] = predicted_pos;
-                    self.velocities[i] = predicted_vel; 
+                    self.positions[i] = new_pos;
+                    self.velocities[i] = new_vel; 
                     continue
                 }
-
+                
                 let ttc = frac_to_collision*timestep; // Time to collision
                 let tac = timestep - ttc; // Time after collisiom
                 let (new_pos , new_vel);
                 match border_idx {
-                    BOTTOM_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel,&self.g, ttc, tac,Y_AXIS),
-                    LEFT_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel, &self.g, ttc, tac,X_AXIS),
-                    RIGHT_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel,&self.g, ttc, tac, X_AXIS),
-                    TOP_IDX => (new_pos, new_vel) = Self::circle_border_collision(&pos, &vel, &self.g, ttc, tac, Y_AXIS),
+                    BOTTOM_IDX => (new_pos, new_vel) = Self::elastic_circle_border_collision(&pos, &vel,&self.g, ttc, tac,Y_AXIS),
+                    LEFT_IDX => (new_pos, new_vel) = Self::elastic_circle_border_collision(&pos, &vel, &self.g, ttc, tac,X_AXIS),
+                    RIGHT_IDX => (new_pos, new_vel) = Self::elastic_circle_border_collision(&pos, &vel,&self.g, ttc, tac, X_AXIS),
+                    TOP_IDX => (new_pos, new_vel) = Self::elastic_circle_border_collision(&pos, &vel, &self.g, ttc, tac, Y_AXIS),
                     _ => panic!("You should not be here!")
                 };
-
-                self.positions[i] = new_pos;
-                self.velocities[i] = new_vel; 
+                
+                    self.positions[i] = new_pos;
+                    self.velocities[i] = new_vel; 
+                }
             }
-        }
     }
 
-    fn circle_border_collision(
+    fn elastic_circle_border_collision(
         pos: &Vector3<f32>, vel:  &Vector3<f32>, gravity: &Vector3<f32>,
         ttc: f32, tac: f32, reverse_dim: u8 
     ) -> (Vector3<f32>, Vector3<f32>) {
         // https://www.gamedev.net/forums/topic/571402-ball-never-stops-bouncing/4651063/
         // Compute pre-collision state, velocity and position
-        let pre_collision_point = *pos + vel*ttc + 0.5*gravity*ttc.pow(2);
+        let pre_collision_pos = *pos + vel*ttc + 0.5*gravity*ttc.pow(2);
         let pre_collision_vel = vel + gravity*ttc;
         // Perform collision response
         let crf = Self::nonlinear_crf(
             f32::abs(pre_collision_vel.y), 0.85, 0.03, 0.7);
         let mut direction = Vector3::new(1.0, 1.0, 1.0);
         direction[reverse_dim as usize] = -crf;
-        let post_collision_vel = vel.mul_element_wise(direction);
+        let post_collision_vel = pre_collision_vel.mul_element_wise(direction);
         // Compute post collision state
-        let new_position = pre_collision_point + post_collision_vel*tac + 0.5 * gravity*tac.pow(2);
+        let new_position = pre_collision_pos + post_collision_vel*tac + 0.5 * gravity*tac.pow(2);
         let new_velocity = post_collision_vel + gravity * tac;
         return (new_position, new_velocity); 
     }
 
+    fn elastic_collision(
+        crf: f32, vel_a: f32, vel_b: f32, mass_a: f32, mass_b:f32
+    ) -> f32 {
+        return ( crf*mass_b*(vel_b-vel_a) + mass_a*vel_a + mass_b*vel_b) / (mass_a + mass_b);
+    }
 
     /// Detects collision with any of the 4 borders.
     ///
