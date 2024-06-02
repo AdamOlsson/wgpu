@@ -135,7 +135,9 @@ impl GravitySimulation {
         let gravity_vec = gravity*tac;
         let mut new_velocity = post_collision_vel + gravity_vec;
         if gravity_vec.y.abs() > post_collision_vel.y.abs() {
-            // Gravity overcomes the bounce up, only apply horizontal movement
+            // Note: when the gravity is stronger than the bounce up, the objects new
+            // position will fall under the bottom border. To prevent this, we simply
+            // set the y-component of the new velocity to zero.
             new_velocity.y = 0.0;
             let mask = Vector3::new(1.0, 0.0, 1.0);
             new_position = pos + vel.mul_element_wise(mask)*tbc;
