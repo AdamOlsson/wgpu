@@ -1,6 +1,6 @@
 use winit::window::Window;
 
-use crate::{simulation::{collision_simulation::CollisionSimulation, gravity_simulation::GravitySimulation}, renderer_backend::{graphics_context::GraphicsContext, instance::Instance, render_pass::RenderPass, Pass}};
+use crate::{renderer_backend::{graphics_context::GraphicsContext, instance::Instance, render_pass::RenderPass, Pass}, simulation::{self, collision_simulation::CollisionSimulation, gravity_simulation::GravitySimulation, verlet_integration::VerletIntegration}};
 
 
 pub struct State<'a> {
@@ -9,8 +9,9 @@ pub struct State<'a> {
     pass: RenderPass,
     size: winit::dpi::PhysicalSize<u32>,
 
-    simulation: GravitySimulation,
+    //simulation: GravitySimulation,
     //simulation: CollisionSimulation,
+    simulation: VerletIntegration,
 
     instance_buffer: wgpu::Buffer,
     vertex_buffer: wgpu::Buffer,
@@ -26,7 +27,8 @@ impl <'a> State <'a> {
         let pass = RenderPass::new(&ctx.device);
         
         //let simulation = CollisionSimulation::new();
-        let simulation = GravitySimulation::new();
+        //let simulation = GravitySimulation::new();
+        let simulation = VerletIntegration::new();
     
         let vertex_buffer = ctx.create_buffer(
             "Circle vertex buffer", bytemuck::cast_slice(&simulation.vertices),
