@@ -24,7 +24,7 @@ async fn run() {
         .unwrap();
     let event_loop_proxy = event_loop.create_proxy();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
-    let _ = window.request_inner_size(PhysicalSize::new(800, 800));
+    let _ = window.request_inner_size(PhysicalSize::new(1080, 1080));
 
     let mut state = state::State::new(&window).await;
 

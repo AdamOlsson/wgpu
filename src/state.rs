@@ -83,7 +83,7 @@ impl <'a> State <'a> {
         self.pass.draw(&self.ctx.surface, &self.ctx.device, &self.ctx.queue,
             &self.vertex_buffer, &self.index_buffer, &self.instance_buffer,
             self.simulation.num_indices,
-            self.simulation.num_instances
+            self.simulation.num_instances_to_render
         ).unwrap();
         return Ok(());
     }
