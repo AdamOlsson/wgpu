@@ -1,6 +1,6 @@
 use winit::window::Window;
 
-use crate::{renderer_backend::{graphics_context::GraphicsContext, instance::Instance, render_pass::RenderPass, Pass}, simulation::{self, collision_simulation::CollisionSimulation, gravity_simulation::GravitySimulation, verlet_integration::VerletIntegration}};
+use crate::{renderer_backend::{graphics_context::GraphicsContext, instance::Instance, render_pass::RenderPass, Pass}, simulation::{verlet_collision_simulation::VerletCollisionSimulation, verlet_integration::VerletIntegration}};
 
 
 pub struct State<'a> {
@@ -11,7 +11,8 @@ pub struct State<'a> {
 
     //simulation: GravitySimulation,
     //simulation: CollisionSimulation,
-    simulation: VerletIntegration,
+    //simulation: VerletIntegration,
+    simulation: VerletCollisionSimulation,
 
     instance_buffer: wgpu::Buffer,
     vertex_buffer: wgpu::Buffer,
@@ -28,7 +29,8 @@ impl <'a> State <'a> {
         
         //let simulation = CollisionSimulation::new();
         //let simulation = GravitySimulation::new();
-        let simulation = VerletIntegration::new();
+        //let simulation = VerletIntegration::new();
+        let simulation = VerletCollisionSimulation::new();
     
         let vertex_buffer = ctx.create_buffer(
             "Circle vertex buffer", bytemuck::cast_slice(&simulation.vertices),
@@ -38,9 +40,10 @@ impl <'a> State <'a> {
                 "Circle index buffer", bytemuck::cast_slice(&simulation.indices),
                 wgpu::BufferUsages::INDEX);
         
-        let instances = (0..simulation.num_instances as usize).map(
+        let positions = simulation.get_positions();
+        let instances = (0..simulation.get_target_num_instances() as usize).map(
             |i| Instance {
-                position: simulation.positions[i].into(),
+                position: positions[i].into(),
                 color: simulation.colors[i].into(),
             }).collect::<Vec<_>>();
 
@@ -67,8 +70,9 @@ impl <'a> State <'a> {
         self.simulation.update();
 
         let mut instance_data: Vec<[[f32;3];2]> = Vec::new();
-        for i in 0..self.simulation.num_instances as usize {
-            instance_data.push([self.simulation.positions[i].into(), self.simulation.colors[i].into()]);
+        let positions = self.simulation.get_positions();
+        for i in 0..self.simulation.get_num_active_instances() as usize {
+            instance_data.push([positions[i].into(), self.simulation.colors[i].into()]);
         }
         
         // To prevent writing the static colors every run, we probably can use a global buffer and write 
@@ -83,7 +87,7 @@ impl <'a> State <'a> {
         self.pass.draw(&self.ctx.surface, &self.ctx.device, &self.ctx.queue,
             &self.vertex_buffer, &self.index_buffer, &self.instance_buffer,
             self.simulation.num_indices,
-            self.simulation.num_instances_to_render
+            self.simulation.get_num_active_instances(),
         ).unwrap();
         return Ok(());
     }

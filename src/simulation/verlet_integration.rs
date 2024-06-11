@@ -1,159 +1,125 @@
-use std::{cell, sync::{Arc, Mutex}, thread, time::Instant};
+
+use std::{sync::{Arc, Mutex}, thread};
 use cgmath::{InnerSpace, Vector3};
 
-use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
+type ConstraintFn = fn(&mut Vector3<f32>, &f32);
+type SolverFn = fn(&mut [Vector3<f32>], &[f32]);
 
-use super::util::{generate_random_colors, MAX_INSTANCES};
-
-pub struct VerletIntegration {
-    pub positions: [Vector3<f32>; MAX_INSTANCES],
-    prev_positions: [Vector3<f32>; MAX_INSTANCES],
-    acceleration: [Vector3<f32>; MAX_INSTANCES],
-    mass: [f32; MAX_INSTANCES],
-    radius: [f32; MAX_INSTANCES],
-
-    timestamp: Instant,
-    last_spawn: Instant,
-    spawn_rate_ms: u32,
-
-    pub num_instances: u32,
-    pub vertices: Vec<Vertex>,
-    pub indices: Vec<u16>,
-    pub num_indices: u32,
-    pub colors: [Vector3<f32>; MAX_INSTANCES],
-    pub num_instances_to_render: u32,
+#[allow(dead_code)]
+#[derive(Debug)]
+pub enum SolverType {
+    Naive,
+    SpatialSubdivision,
+    ParallelNaive,
+    //ParallelSpatialSubdivision,
 }
 
-impl VerletIntegration {
+pub struct VerletIntegration
+{
+    pub positions: Vec<Vector3<f32>>,
+    prev_positions: Vec<Vector3<f32>>,
+    acceleration: Vec<Vector3<f32>>, 
+    radii: Vec<f32>,
+
+    constraint_fn:  ConstraintFn,
+    solver_fn: SolverFn,
+    num_solver_steps : u32,
+
+    num_instances: u32,
+}
+
+impl VerletIntegration { 
     pub fn new() -> Self {
-        let common_radius = 0.01;
-        let num_instances = 1;
-        let spawn_rate_ms = 50;
-        let num_instances_to_render = 0;
-        let prev_positions = [Vector3::new(-0.5, 0.2, 0.0); MAX_INSTANCES];
-        let positions = [Vector3::new(-0.48, 0.22, 0.0); MAX_INSTANCES];
-        let acceleration = [Vector3::new(0.0, -90.82, 0.0); MAX_INSTANCES];
-        let mass = [1.0; MAX_INSTANCES];
-        let radius = [common_radius; MAX_INSTANCES];
+        
+        let prev_positions = vec![];
+        let positions = vec![];
+        let acceleration = vec![];
+        let radii = vec![];
 
-        let vertices = Circle::compute_vertices([0.0,0.0,0.0], common_radius);
-        let indices = Circle::compute_indices();
-        let num_indices = (359)*3;
-        let colors = generate_random_colors();
+        let num_instances = acceleration.len() as u32;
 
-        let timestamp = Instant::now();
-        let last_spawn = Instant::now();
+        let constraint_fn = |_: &mut Vector3<f32>, _: &f32 | {
+            panic!("Constraint function not set");
+        };
+
+        let solver_fn = |_: &mut [Vector3<f32>], _: &[f32]| {
+            panic!("Solver function not set");
+        };
+        let num_solver_steps = 1;
 
         Self {
             positions,
             prev_positions,
             acceleration,
-            mass,
-            radius,
+            radii,
             num_instances,
-            num_instances_to_render,
-            vertices,
-            indices,
-            num_indices,
-            colors,
-            timestamp,
-            last_spawn,
-            spawn_rate_ms
+            constraint_fn,
+            solver_fn,
+            num_solver_steps,
         }
     }
 
-    fn spawn(&mut self, fps: f32) {
-        if self.num_instances == self.num_instances_to_render {
-            return;
-        }
-
-        let target_fps = 60.0;
-        if self.num_instances_to_render > 1 && fps < target_fps {
-            //panic!("Fps is below {}", target_fps);
-            return;
-        }
-
-        let now = Instant::now();
-        let diff = now - self.last_spawn;
-        if diff.as_millis() > self.spawn_rate_ms as u128 {
-            self.num_instances_to_render += 1;
-            self.last_spawn = now;
-        }
+    pub fn spawn_one_instance(&mut self) {
+        self.num_instances += 1;
     }
 
-    fn circle_constraint(
-        pos: &mut Vector3<f32>, radius: &f32, constraint_center: &Vector3<f32>, constraint_radius: &f32
-    )  {
-        let diff = *pos - constraint_center;
-        let dist = diff.magnitude();
-        if dist > (constraint_radius - radius) {
-           let correction_direction = diff / dist;
-           *pos = constraint_center + correction_direction*(constraint_radius - radius);
-        }
+    pub fn use_constraint(&mut self, f: ConstraintFn) {
+        self.constraint_fn = f;
     }
 
-    fn box_constraint(
-        pos: &mut Vector3<f32>, radius: &f32, constraint_top_left: &Vector3<f32>, constraint_bottom_right: &Vector3<f32>
-    ) { 
-        // Left side
-        if pos.x - radius < constraint_top_left.x {
-            let diff = pos.x - radius  - constraint_top_left.x;
-            pos.x -= diff*2.0;
-        }
-        // Right side
-        if pos.x + radius > constraint_bottom_right.x {
-            let diff = pos.x + radius - constraint_bottom_right.x; 
-            pos.x -= diff*2.0;
-        }
-        // Bottom side
-        if pos.y - radius < constraint_bottom_right.y {
-            let diff = pos.y - radius - constraint_bottom_right.y;
-            pos.y -= diff*2.0;
-        }
-        // Top side
-        if pos.y + radius > constraint_top_left.y {
-            let diff = pos.y + radius - constraint_top_left.y;
-            pos.y -= diff*2.0;
-        }
+    pub fn use_solver(&mut self, t: SolverType) {
+        let f = match t {
+            SolverType::Naive => Self::naive_collision_detection_and_resolution,
+            SolverType::SpatialSubdivision => Self::spatial_subdivision,
+            SolverType::ParallelNaive => Self::par_naive_collision_detection_and_resolution,
+            //SolverType::ParallelSpatialSubdivision => Self::par_spatial_subdivision,
+        };
+        self.solver_fn = f;
+    }
+
+    pub fn set_num_solver_steps(&mut self, num_solver_steps: u32) {
+        self.num_solver_steps = num_solver_steps;
+    }
+
+    pub fn set_radii(&mut self, radii: Vec<f32>) {
+        self.radii = radii;
+    }
+
+    pub fn set_positions(&mut self, positions: Vec<Vector3<f32>>){
+        self.positions = positions;
+    }
+
+    pub fn set_prev_positions(&mut self, prev_positions: Vec<Vector3<f32>>) {
+        self.prev_positions = prev_positions;
     } 
 
-    pub fn update(&mut self) {
-        let now = Instant::now();
-        //let dt = (now - self.timestamp).as_millis() as f32 / 1000.0;
-        let dt = 0.001;
-        let actual_time = (now - self.timestamp).as_millis() as f32 / 1000.0;
-        let fps = 1.0/actual_time;
-        self.timestamp = now;
-        self.spawn(fps);
+    pub fn set_acceleration(&mut self, acceleration: Vec<Vector3<f32>>) {
+        self.acceleration = acceleration;
+    }
 
+    pub fn get_positions(&self) -> &Vec<Vector3<f32>> {
+        &self.positions
+    }
+
+    pub fn update(&mut self, dt: f32) {
         // Update positions
-        for i in 0..self.num_instances_to_render as usize {
+        for i in 0..self.num_instances as usize {
             let velocity = self.positions[i] - self.prev_positions[i];
             self.prev_positions[i] = self.positions[i];
             self.positions[i] = self.positions[i] + velocity + self.acceleration[i] * dt*dt;   
         }
 
         // Constraints
-        let constraint_center = Vector3::new(0.0,0.0,0.0);
-        let constrain_radius = 0.95;
-        let constraint_top_left = Vector3::new(-1.0, 1.0, 0.0);
-        let constraint_bottom_right = Vector3::new(1.0, -1.0, 0.0);
-        for i in 0..self.num_instances_to_render  as usize {
-            //Self::circle_constraint(&mut self.positions[i], &self.radius[i], &constraint_center, &constrain_radius);
-            Self::box_constraint(&mut self.positions[i], &self.radius[i], &constraint_top_left, &constraint_bottom_right);
+        for i in 0..self.num_instances  as usize {
+            (self.constraint_fn)(&mut self.positions[i], &self.radii[i]);
         }
-        println!("{:?} -> {:?}", self.prev_positions[0], self.positions[0]);
 
         // Solve collisions
-        let num_substeps = 1;
-        let pos_slice = &mut self.positions[0..self.num_instances_to_render as usize];
-        let rad_slice = &mut self.radius[0..self.num_instances_to_render as usize];
-        for _ in 0..num_substeps {
-            //Self::spatial_subdivision(pos_slice, rad_slice);
-            Self::par_spatial_subdivision(pos_slice, rad_slice);
+        let pos_slice = &mut self.positions[0..self.num_instances as usize];
+        let rad_slice = &mut self.radii[0..self.num_instances as usize];
+        for _ in 0..self.num_solver_steps {
+            (self.solver_fn)(pos_slice, rad_slice);
         }
-
-        println!("fps: {} seconds, num_objects: {}", fps, self.num_instances_to_render);
     }
 
     fn naive_collision_detection_and_resolution(
@@ -179,6 +145,7 @@ impl VerletIntegration {
         }
     }
 
+    #[allow(dead_code)]
     fn spatial_subdivision(
         positions: &mut [Vector3<f32>], radius: &[f32]
     ) {
@@ -222,6 +189,7 @@ impl VerletIntegration {
             }
         }
     }
+
     fn get_local_cell_ids(center_id: u32, grid_width: u32) -> [u32; 9] {
         let top_left = center_id - grid_width - 1;
         let top_center = center_id - grid_width;
@@ -254,12 +222,7 @@ impl VerletIntegration {
         return cells;
     }
 
-    /// Run a parallell implementation of the spatial subdivision
-    /// 
-    /// Split the render window into columns and perform collision detection and
-    /// response in parallell. Starting from the 2nd column and 2nd row, each thread
-    /// performs spatial subdivision on neighbouring cells.
-    fn par_spatial_subdivision(
+    fn par_naive_collision_detection_and_resolution(
         positions: &mut [Vector3<f32>], radius: &[f32]
     ){
         if positions.len() <= 1 {
