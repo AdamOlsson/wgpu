@@ -27,7 +27,7 @@ pub struct VerletIntegration {
 impl VerletIntegration {
     pub fn new() -> Self {
         let common_radius = 0.01;
-        let num_instances = 1000;
+        let num_instances = 1;
         let spawn_rate_ms = 50;
         let num_instances_to_render = 0;
         let prev_positions = [Vector3::new(-0.5, 0.2, 0.0); MAX_INSTANCES];
@@ -81,6 +81,42 @@ impl VerletIntegration {
         }
     }
 
+    fn circle_constraint(
+        pos: &mut Vector3<f32>, radius: &f32, constraint_center: &Vector3<f32>, constraint_radius: &f32
+    )  {
+        let diff = *pos - constraint_center;
+        let dist = diff.magnitude();
+        if dist > (constraint_radius - radius) {
+           let correction_direction = diff / dist;
+           *pos = constraint_center + correction_direction*(constraint_radius - radius);
+        }
+    }
+
+    fn box_constraint(
+        pos: &mut Vector3<f32>, radius: &f32, constraint_top_left: &Vector3<f32>, constraint_bottom_right: &Vector3<f32>
+    ) { 
+        // Left side
+        if pos.x - radius < constraint_top_left.x {
+            let diff = pos.x - radius  - constraint_top_left.x;
+            pos.x -= diff*2.0;
+        }
+        // Right side
+        if pos.x + radius > constraint_bottom_right.x {
+            let diff = pos.x + radius - constraint_bottom_right.x; 
+            pos.x -= diff*2.0;
+        }
+        // Bottom side
+        if pos.y - radius < constraint_bottom_right.y {
+            let diff = pos.y - radius - constraint_bottom_right.y;
+            pos.y -= diff*2.0;
+        }
+        // Top side
+        if pos.y + radius > constraint_top_left.y {
+            let diff = pos.y + radius - constraint_top_left.y;
+            pos.y -= diff*2.0;
+        }
+    } 
+
     pub fn update(&mut self) {
         let now = Instant::now();
         //let dt = (now - self.timestamp).as_millis() as f32 / 1000.0;
@@ -100,14 +136,13 @@ impl VerletIntegration {
         // Constraints
         let constraint_center = Vector3::new(0.0,0.0,0.0);
         let constrain_radius = 0.95;
+        let constraint_top_left = Vector3::new(-1.0, 1.0, 0.0);
+        let constraint_bottom_right = Vector3::new(1.0, -1.0, 0.0);
         for i in 0..self.num_instances_to_render  as usize {
-            let diff = self.positions[i] - constraint_center;
-            let dist = diff.magnitude();
-            if dist > (constrain_radius - self.radius[i]) {
-                let correction_direction = diff / dist;
-                self.positions[i] = constraint_center + correction_direction*(constrain_radius - self.radius[i]);
-            }
+            //Self::circle_constraint(&mut self.positions[i], &self.radius[i], &constraint_center, &constrain_radius);
+            Self::box_constraint(&mut self.positions[i], &self.radius[i], &constraint_top_left, &constraint_bottom_right);
         }
+        println!("{:?} -> {:?}", self.prev_positions[0], self.positions[0]);
 
         // Solve collisions
         let num_substeps = 1;
