@@ -1,4 +1,4 @@
-use std::{sync::{Arc, Mutex}, thread, time::Instant};
+use std::{cell, sync::{Arc, Mutex}, thread, time::Instant};
 use cgmath::{InnerSpace, Vector3};
 
 use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
@@ -110,20 +110,21 @@ impl VerletIntegration {
         }
 
         // Solve collisions
-        let num_substeps = 6;
+        let num_substeps = 1;
         let pos_slice = &mut self.positions[0..self.num_instances_to_render as usize];
         let rad_slice = &mut self.radius[0..self.num_instances_to_render as usize];
         for _ in 0..num_substeps {
-            //Self::spatial_subdivision(pos_slice, rad_slice, self.num_instances_to_render);
-            Self::par_spatial_subdivision(pos_slice, rad_slice, self.num_instances_to_render);
+            //Self::spatial_subdivision(pos_slice, rad_slice);
+            Self::par_spatial_subdivision(pos_slice, rad_slice);
         }
 
         println!("fps: {} seconds, num_objects: {}", fps, self.num_instances_to_render);
     }
 
     fn naive_collision_detection_and_resolution(
-        positions: &mut [Vector3<f32>], radius: &[f32], num_instances: u32
+        positions: &mut [Vector3<f32>], radius: &[f32]
     ){
+        let num_instances = positions.len() as usize;
         for i in 0..num_instances as usize {
             let pos_a = positions[i];
             for j in (i+1)..num_instances as usize {
@@ -144,25 +145,17 @@ impl VerletIntegration {
     }
 
     fn spatial_subdivision(
-        positions: &mut [Vector3<f32>], radius: &[f32], num_instances: u32
+        positions: &mut [Vector3<f32>], radius: &[f32]
     ) {
-        if num_instances == 0 {
+        if positions.len() == 0 {
             return;
         }
         // Create grid with largest side equal to the largest diameter of the circles
-        let cell_size = radius.iter().take(num_instances as usize).fold(0.0, |acc, &r| f32::max(acc, r))*2.0;
+        let cell_size = radius.iter().fold(0.0, |acc, &r| f32::max(acc, r))*2.0;
         let grid_width = (2.0/cell_size).ceil() as u32;
 
-        // Assign each circle to a cell
-        let mut cells: Vec<Vec<usize>> = vec![Vec::new(); (grid_width*grid_width) as usize];
-        for i in 0..num_instances as usize {
-            let pos = positions[i];
-            // Add 1.0 to offset all coordinates between 0.0 and 2.0
-            let x = ((pos.x + 1.0)/cell_size) as u32;
-            let y = ((pos.y + 1.0)/cell_size) as u32;
-            let cell_index = (y*grid_width + x) as usize;
-            cells[cell_index].push(i);
-        }
+        let cells = Self::assign_object_to_cell(positions, radius);
+
         // For each cell, compute collision between all circles in the current cell and
         // all surrounding cells. Skip over the outer most cells.
         for i in 1..(grid_width-1) {
@@ -186,7 +179,7 @@ impl VerletIntegration {
                 if num_local_instances <= 1 {
                     continue;
                 }
-                Self::naive_collision_detection_and_resolution(&mut local_positions, &local_radius, num_local_instances);
+                Self::naive_collision_detection_and_resolution(&mut local_positions, &local_radius);
                 // Update positions
                 for k in 0..num_local_instances as usize {
                     positions[local_object_ids[k] as usize] = local_positions[k];
@@ -210,31 +203,38 @@ impl VerletIntegration {
         ];
     }
 
-    /// Run a parallell implementation of the spatial subdivision
-    /// 
-    /// Split the render window into columns and perform collision detection and
-    /// response in parallell. Starting from the 2nd column and 2nd row, each thread
-    /// performs spatial subdivision on neighbouring cells.
-    fn par_spatial_subdivision(
-        positions: &mut [Vector3<f32>], radius: &[f32], num_instances: u32
-    ){
-        if num_instances <= 1 {
-            return;
-        }
-        // Create grid with largest side equal to the largest diameter of the circles
-        let cell_size = radius.iter().take(num_instances as usize).fold(0.0, |acc, &r| f32::max(acc, r))*2.0;
+    fn assign_object_to_cell(positions: &mut [Vector3<f32>], radius: &[f32]) -> Vec<Vec<usize>> {
+        let cell_size = radius.iter().fold(0.0, |acc, &r| f32::max(acc, r))*2.0;
         let grid_width = (2.0/cell_size).ceil() as u32;
 
-        // Assign each circle to a cell
+       // Assign each circle to a cell
         let mut cells: Vec<Vec<usize>> = vec![Vec::new(); (grid_width*grid_width) as usize];
-        for i in 0..num_instances as usize {
-            let pos = positions[i];
+        for (i, pos) in positions.iter().enumerate() {
             // Add 1.0 to offset all coordinates between 0.0 and 2.0
             let x = ((pos.x + 1.0)/cell_size) as u32;
             let y = ((pos.y + 1.0)/cell_size) as u32;
             let cell_index = (y*grid_width + x) as usize;
             cells[cell_index].push(i);
         }
+        return cells;
+    }
+
+    /// Run a parallell implementation of the spatial subdivision
+    /// 
+    /// Split the render window into columns and perform collision detection and
+    /// response in parallell. Starting from the 2nd column and 2nd row, each thread
+    /// performs spatial subdivision on neighbouring cells.
+    fn par_spatial_subdivision(
+        positions: &mut [Vector3<f32>], radius: &[f32]
+    ){
+        if positions.len() <= 1 {
+            return;
+        }
+        // Create grid with largest side equal to the largest diameter of the circles
+        let cell_size = radius.iter().fold(0.0, |acc, &r| f32::max(acc, r))*2.0;
+        let grid_width = (2.0/cell_size).ceil() as u32;
+
+        let cells = Self::assign_object_to_cell(positions, radius);
 
         Self::run_pass(1, positions, radius, &cells, grid_width);
         Self::run_pass(2, positions, radius, &cells, grid_width);
@@ -261,7 +261,7 @@ impl VerletIntegration {
         let mut localized_object_ids = Vec::new();
         for column_id in (pass_num..grid_width-1).step_by(3) {
             let thread_local_cell_ids = Self::get_thread_context_cell_ids(column_id, grid_width);
-            // Collect local information
+            // Assign cell ids to columns 
             let mut thread_local_positions = Vec::new();
             let mut thread_local_radius = Vec::new();
             let mut thread_local_object_ids = Vec::new();
@@ -284,9 +284,8 @@ impl VerletIntegration {
                 let thread_local_radius = &localized_radius[thread_id];
                 let global_output = Arc::clone(&output);
                 scope.spawn(move || {
-                    let num_local_instances = thread_local_positions.len() as u32;
-                    // FIXME: Replace with spatial_subdivion()
-                    Self::naive_collision_detection_and_resolution(&mut thread_local_positions[..], &thread_local_radius, num_local_instances);
+                    //Self::spatial_subdivision(&mut thread_local_positions[..], &thread_local_radius);
+                    Self::naive_collision_detection_and_resolution(&mut thread_local_positions[..], &thread_local_radius);
                     global_output.lock().unwrap().push((thread_id, thread_local_positions));
                 });
             }
