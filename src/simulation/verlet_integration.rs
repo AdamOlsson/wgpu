@@ -59,8 +59,14 @@ impl VerletIntegration {
         }
     }
 
+    #[allow(dead_code)]
     pub fn spawn_one_instance(&mut self) {
         self.num_instances += 1;
+    }
+
+    #[allow(dead_code)]
+    pub fn spawn_all_instances(&mut self) {
+        self.num_instances = self.acceleration.len() as u32;
     }
 
     pub fn use_constraint(&mut self, f: ConstraintFn) {
@@ -298,5 +304,49 @@ impl VerletIntegration {
                 positions[object_id] = thread_local_positions[k];
             }
         }
+    }
+}
+
+
+#[allow(dead_code)]
+pub fn circle_constraint(
+    pos: &mut Vector3<f32>, radius: &f32
+)  {
+    let constraint_center = Vector3::new(0.0,0.0,0.0);
+    let constraint_radius = &0.95;
+
+    let diff = *pos - constraint_center;
+    let dist = diff.magnitude();
+    if dist > (constraint_radius - radius) {
+        let correction_direction = diff / dist;
+        *pos = constraint_center + correction_direction*(constraint_radius - radius);
+    }
+}
+
+#[allow(dead_code)]
+pub fn box_constraint(
+    pos: &mut Vector3<f32>, radius: &f32
+) { 
+    let constraint_top_left = Vector3::new(-1.0, 1.0, 0.0);
+    let constraint_bottom_right = Vector3::new(1.0, -1.0, 0.0);
+    // Left side
+    if pos.x - radius < constraint_top_left.x {
+        let diff = pos.x - radius  - constraint_top_left.x;
+        pos.x -= diff*2.0;
+    }
+    // Right side
+    if pos.x + radius > constraint_bottom_right.x {
+        let diff = pos.x + radius - constraint_bottom_right.x; 
+        pos.x -= diff*2.0;
+    }
+    // Bottom side
+    if pos.y - radius < constraint_bottom_right.y {
+        let diff = pos.y - radius - constraint_bottom_right.y;
+        pos.y -= diff*2.0;
+    }
+    // Top side
+    if pos.y + radius > constraint_top_left.y {
+        let diff = pos.y + radius - constraint_top_left.y;
+        pos.y -= diff*2.0;
     }
 }

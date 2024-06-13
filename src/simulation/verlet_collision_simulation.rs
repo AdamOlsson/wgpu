@@ -1,5 +1,5 @@
 use std::time::{Duration, Instant};
-use cgmath::{InnerSpace, Vector3};
+use cgmath::Vector3;
 use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
 use super::{util::{generate_random_colors, MAX_INSTANCES}, verlet_integration::VerletIntegration};
 
@@ -34,7 +34,7 @@ impl VerletCollisionSimulation {
         let acceleration = [Vector3::new(0.0, -150.0, 0.0); MAX_INSTANCES].to_vec();
 
         let mut engine = VerletIntegration::new();
-        engine.use_constraint(Self::circle_constraint);
+        engine.use_constraint(super::verlet_integration::circle_constraint);
         engine.use_solver(super::verlet_integration::SolverType::SpatialSubdivision);
         engine.set_num_solver_steps(1);
         engine.set_radii(radii);
@@ -107,49 +107,4 @@ impl VerletCollisionSimulation {
             self.last_spawn = now;
         }
     }
-
-    // FIXME: Move this out
-    #[allow(dead_code)]
-    fn circle_constraint(
-        pos: &mut Vector3<f32>, radius: &f32
-    )  {
-        let constraint_center = Vector3::new(0.0,0.0,0.0);
-        let constraint_radius = &0.95;
-
-        let diff = *pos - constraint_center;
-        let dist = diff.magnitude();
-        if dist > (constraint_radius - radius) {
-           let correction_direction = diff / dist;
-           *pos = constraint_center + correction_direction*(constraint_radius - radius);
-        }
-    }
-
-    // FIXME: Move this out
-    #[allow(dead_code)]
-    fn box_constraint(
-        pos: &mut Vector3<f32>, radius: &f32
-    ) { 
-        let constraint_top_left = Vector3::new(-1.0, 1.0, 0.0);
-        let constraint_bottom_right = Vector3::new(1.0, -1.0, 0.0);
-        // Left side
-        if pos.x - radius < constraint_top_left.x {
-            let diff = pos.x - radius  - constraint_top_left.x;
-            pos.x -= diff*2.0;
-        }
-        // Right side
-        if pos.x + radius > constraint_bottom_right.x {
-            let diff = pos.x + radius - constraint_bottom_right.x; 
-            pos.x -= diff*2.0;
-        }
-        // Bottom side
-        if pos.y - radius < constraint_bottom_right.y {
-            let diff = pos.y - radius - constraint_bottom_right.y;
-            pos.y -= diff*2.0;
-        }
-        // Top side
-        if pos.y + radius > constraint_top_left.y {
-            let diff = pos.y + radius - constraint_top_left.y;
-            pos.y -= diff*2.0;
-        }
-    } 
 }

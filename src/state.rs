@@ -1,6 +1,6 @@
 use winit::window::Window;
 
-use crate::{renderer_backend::{graphics_context::GraphicsContext, instance::Instance, render_pass::RenderPass, Pass}, simulation::{verlet_collision_simulation::VerletCollisionSimulation, verlet_integration::VerletIntegration}};
+use crate::{renderer_backend::{graphics_context::GraphicsContext, instance::Instance, render_pass::RenderPass, Pass}, simulation::{particle_fire_simulation::{ParticleFireSimulation}, verlet_collision_simulation::VerletCollisionSimulation, verlet_integration::VerletIntegration}};
 
 
 pub struct State<'a> {
@@ -12,7 +12,8 @@ pub struct State<'a> {
     //simulation: GravitySimulation,
     //simulation: CollisionSimulation,
     //simulation: VerletIntegration,
-    simulation: VerletCollisionSimulation,
+    //simulation: VerletCollisionSimulation,
+    simulation: ParticleFireSimulation,
 
     instance_buffer: wgpu::Buffer,
     vertex_buffer: wgpu::Buffer,
@@ -30,7 +31,8 @@ impl <'a> State <'a> {
         //let simulation = CollisionSimulation::new();
         //let simulation = GravitySimulation::new();
         //let simulation = VerletIntegration::new();
-        let simulation = VerletCollisionSimulation::new();
+        //let simulation = VerletCollisionSimulation::new();
+        let simulation = ParticleFireSimulation::new();
     
         let vertex_buffer = ctx.create_buffer(
             "Circle vertex buffer", bytemuck::cast_slice(&simulation.vertices),
