@@ -48,7 +48,7 @@ impl VerletCollisionSimulation {
 
         let colors = generate_random_colors();
         let indices = Circle::compute_indices();
-        let vertices = Circle::compute_vertices([0.0,0.0,0.0], common_radius);
+        let vertices = Circle::compute_vertices([0.0,0.0,0.0], 1.0);
         let num_indices = (359)*3;
 
         Self {
@@ -70,6 +70,10 @@ impl VerletCollisionSimulation {
         self.engine.get_positions()
     }
 
+    pub fn get_radii(&self) -> &Vec<f32> {
+        self.engine.get_radii()
+    }
+
     pub fn get_num_active_instances(&self) -> u32 {
         self.num_active_instances
     }
@@ -77,6 +81,7 @@ impl VerletCollisionSimulation {
     pub fn get_target_num_instances(&self) -> u32 {
         self.target_num_instances
     }
+
 
     pub fn update(&mut self) {
         self.engine.update(self.dt);

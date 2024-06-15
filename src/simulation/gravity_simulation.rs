@@ -47,7 +47,7 @@ impl GravitySimulation {
 
         let colors = generate_random_colors();
         let mass = [1.0; MAX_INSTANCES];
-        let vertices = Circle::compute_vertices([0.0, 0.0, 0.0], radius);
+        let vertices = Circle::compute_vertices([0.0, 0.0, 0.0], 1.0);
         let indices = Circle::compute_indices();
         let num_indices = (359)*3;
 

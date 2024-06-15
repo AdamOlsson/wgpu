@@ -30,11 +30,9 @@ impl ParticleFireSimulation {
         let common_radius = 0.03;
         let target_num_instances: u32 = num_rows * num_cols;
         
-        // FIXME: Add render support for different sized radii
-        let mut radii = vec![common_radius; target_num_instances as usize];
-        radii[0] = 0.08;
+        let radii = Self::generate_random_radii(target_num_instances, common_radius, 0.02);
 
-        let prev_positions = Self::create_grid_positions(num_rows, num_cols, 0.01);
+        let prev_positions = Self::create_grid_positions(num_rows, num_cols, 0.1);
         let positions = prev_positions.clone();
         let acceleration = vec![Vector3::new(0.0, -150.0, 0.0); target_num_instances as usize];
 
@@ -53,7 +51,7 @@ impl ParticleFireSimulation {
 
         let colors = generate_random_colors();
         let indices = Circle::compute_indices();
-        let vertices = Circle::compute_vertices([0.0,0.0,0.0], common_radius);
+        let vertices = Circle::compute_vertices([0.0,0.0,0.0], 1.0);
         let num_indices = (359)*3;
 
         Self {
@@ -66,6 +64,16 @@ impl ParticleFireSimulation {
             vertices,
             num_indices,
         }
+    }
+
+    fn generate_random_radii(num_instances: u32, base_radius: f32, variance: f32) -> Vec<f32> {
+        let mut rng = rand::thread_rng();
+        let mut radii = Vec::new();
+        for _ in 0..num_instances {
+            let radius = base_radius + rng.gen_range(-variance.abs()..variance.abs());
+            radii.push(radius);
+        }
+        radii
     }
 
     fn create_grid_positions(num_rows: u32, num_cols: u32, spacing: f32) -> Vec<Vector3<f32>> {
@@ -95,6 +103,10 @@ impl ParticleFireSimulation {
 
     pub fn get_positions(&self) -> &Vec<Vector3<f32>> {
         self.engine.get_positions()
+    }
+
+    pub fn get_radii(&self) -> &Vec<f32> {
+        self.engine.get_radii()
     }
 
     pub fn get_num_active_instances(&self) -> u32 {

@@ -1,4 +1,5 @@
 // Vertex shader
+// https://webgpufundamentals.org/webgpu/lessons/webgpu-wgsl-function-reference.html
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -8,6 +9,7 @@ struct VertexInput {
 struct InstanceInput {
     @location(2) position: vec3<f32>,
     @location(3) color: vec3<f32>,
+    @location(4) radius: f32,
 };
 
 struct VertexOutput {
@@ -17,12 +19,16 @@ struct VertexOutput {
 
 @vertex
 fn vs_main(
-    model: VertexInput,
+    vertex: VertexInput,
     instance: InstanceInput,
 ) -> VertexOutput {
     var out: VertexOutput;
     out.color = instance.color;
-    out.clip_position = vec4<f32>(model.position, 1.0) + vec4<f32>(instance.position, 0.0);
+
+    // var len = length(vertex.position); // Not needed as we know the length is 1.0
+    var scaled_vs_pos = vertex.position * instance.radius;
+
+    out.clip_position = vec4<f32>(scaled_vs_pos, 1.0) + vec4<f32>(instance.position, 0.0);
     return out;
 }
 

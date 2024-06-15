@@ -16,7 +16,7 @@ pub enum SolverType {
 
 pub struct VerletIntegration
 {
-    pub positions: Vec<Vector3<f32>>,
+    positions: Vec<Vector3<f32>>,
     prev_positions: Vec<Vector3<f32>>,
     acceleration: Vec<Vector3<f32>>, 
     radii: Vec<f32>,
@@ -105,6 +105,10 @@ impl VerletIntegration {
 
     pub fn get_positions(&self) -> &Vec<Vector3<f32>> {
         &self.positions
+    }
+
+    pub fn get_radii(&self) -> &Vec<f32> {
+        &self.radii
     }
 
     pub fn update(&mut self, dt: f32) {
