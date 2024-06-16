@@ -113,16 +113,11 @@ impl ParticleFireSimulation {
         let fps = 1.0 / time_diff.as_secs_f32();
         self.last_update = now;
 
-        // TODO: I was not able to register a context in the verlet_integration module. To
-        // instead handle simulation specific parameters, I will iterate over objects here.
-        // However, doing this in an naive way will significantly slow down the simulation.
-        // So as a solution, I will refactor the spatial subdivision solver to an iterator
-        // which can be used here as well. 
 
         let positions = self.engine.get_positions();
         let radii = self.engine.get_radii();
         let num_instances = positions.len();
-        let mut total_temperature_delta = vec![0.0; num_instances];
+        let mut total_temperature_delta = vec![0.0; positions.len()];
         let temp_delta = 1.0/10000.0;
         for i in 0..num_instances {
             let pos_a = positions[i];
@@ -142,10 +137,10 @@ impl ParticleFireSimulation {
                     }
                 }
             }
-            for (i, t) in total_temperature_delta.iter().enumerate() {
-                self.temperature[i] += t;
-                self.colors[i] = Vector3::new(self.temperature[i].clamp(0.0, 255.0) as f32, 0.0, 0.0);
-            }
+        }
+        for (i, t) in total_temperature_delta.iter().enumerate() {
+            self.temperature[i] += t;
+            self.colors[i] = Vector3::new(self.temperature[i].clamp(0.0, 255.0) as f32, 0.0, 0.0);
         }
 
         println!("fps: {} seconds, num_objects: {}", fps, self.target_num_instances);
