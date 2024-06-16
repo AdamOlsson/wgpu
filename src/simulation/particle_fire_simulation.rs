@@ -1,11 +1,11 @@
 use std::time::Instant;
 
-use cgmath::Vector3;
+use cgmath::{MetricSpace, Vector3};
 use rand::Rng;
 
 use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
 
-use super::{util::{generate_random_colors, MAX_INSTANCES}, verlet_integration::VerletIntegration};
+use super::verlet_integration::VerletIntegration;
 
 
 pub struct ParticleFireSimulation{
@@ -16,8 +16,10 @@ pub struct ParticleFireSimulation{
     last_update: Instant,
     dt: f32,
 
+    temperature: Vec<f32>,
+
     // FIXME: Eventually move these out of the simulation
-    pub colors: [Vector3<f32>; MAX_INSTANCES],
+    pub colors: Vec<Vector3<f32>>,
     pub indices: Vec<u16>,
     pub vertices: Vec<Vertex>,
     pub num_indices: u32,
@@ -25,14 +27,14 @@ pub struct ParticleFireSimulation{
 
 impl ParticleFireSimulation {
     pub fn new() -> Self {
-        let num_rows = 10;//32;
-        let num_cols = 10;//29;
+        let num_rows = 32;
+        let num_cols = 29;
         let common_radius = 0.03;
         let target_num_instances: u32 = num_rows * num_cols;
         
-        let radii = Self::generate_random_radii(target_num_instances, common_radius, 0.02);
+        let radii = Self::generate_random_radii(target_num_instances, common_radius, 0.0);
 
-        let prev_positions = Self::create_grid_positions(num_rows, num_cols, 0.1);
+        let prev_positions = Self::create_grid_positions(num_rows, num_cols, 0.062);
         let positions = prev_positions.clone();
         let acceleration = vec![Vector3::new(0.0, -150.0, 0.0); target_num_instances as usize];
 
@@ -48,8 +50,17 @@ impl ParticleFireSimulation {
 
         let last_update = Instant::now();
         let dt = 0.001;
-
-        let colors = generate_random_colors();
+        
+        let mut temperature = vec![0.0; target_num_instances as usize];
+        let mut colors = vec![];
+        for i in 0..temperature.len() {
+            if i % num_cols as usize == 0 {
+                temperature[i] = 1000.0;
+                colors.push(Vector3::new( f32::clamp(temperature[i], 0.0, 255.0), 0.0, 0.0));
+            } else {
+                colors.push(Vector3::new( 0.0, 0.0, 0.0));
+            }
+        }
         let indices = Circle::compute_indices();
         let vertices = Circle::compute_vertices([0.0,0.0,0.0], 1.0);
         let num_indices = (359)*3;
@@ -59,6 +70,7 @@ impl ParticleFireSimulation {
             target_num_instances,
             last_update,
             dt,
+            temperature,
             colors,
             indices,
             vertices,
@@ -67,13 +79,16 @@ impl ParticleFireSimulation {
     }
 
     fn generate_random_radii(num_instances: u32, base_radius: f32, variance: f32) -> Vec<f32> {
+        if variance == 0.0 {
+            return vec![base_radius; num_instances as usize];
+        }
         let mut rng = rand::thread_rng();
         let mut radii = Vec::new();
         for _ in 0..num_instances {
             let radius = base_radius + rng.gen_range(-variance.abs()..variance.abs());
             radii.push(radius);
         }
-        radii
+        return radii;
     }
 
     fn create_grid_positions(num_rows: u32, num_cols: u32, spacing: f32) -> Vec<Vector3<f32>> {
@@ -96,8 +111,43 @@ impl ParticleFireSimulation {
         let now = Instant::now();
         let time_diff = now - self.last_update;
         let fps = 1.0 / time_diff.as_secs_f32();
-        self.last_update = now; 
-        
+        self.last_update = now;
+
+        // TODO: I was not able to register a context in the verlet_integration module. To
+        // instead handle simulation specific parameters, I will iterate over objects here.
+        // However, doing this in an naive way will significantly slow down the simulation.
+        // So as a solution, I will refactor the spatial subdivision solver to an iterator
+        // which can be used here as well. 
+
+        let positions = self.engine.get_positions();
+        let radii = self.engine.get_radii();
+        let num_instances = positions.len();
+        let mut total_temperature_delta = vec![0.0; num_instances];
+        let temp_delta = 1.0/10000.0;
+        for i in 0..num_instances {
+            let pos_a = positions[i];
+            let rad_a = radii[i];
+            for j in (i+1)..num_instances {
+                let pos_b = positions[j];
+                let rad_b = radii[j];
+                let dist = pos_a.distance2(pos_b);
+                if dist <= (rad_a + rad_b).powi(2) {
+                    // transfer heat
+                    if self.temperature[i] < self.temperature[j] {
+                        total_temperature_delta[i] += temp_delta;
+                        total_temperature_delta[j] -= temp_delta;
+                    } else if self.temperature[i] > self.temperature[j] {
+                        total_temperature_delta[i] -= temp_delta;
+                        total_temperature_delta[j] += temp_delta;
+                    }
+                }
+            }
+            for (i, t) in total_temperature_delta.iter().enumerate() {
+                self.temperature[i] += t;
+                self.colors[i] = Vector3::new(self.temperature[i].clamp(0.0, 255.0) as f32, 0.0, 0.0);
+            }
+        }
+
         println!("fps: {} seconds, num_objects: {}", fps, self.target_num_instances);
     }
 

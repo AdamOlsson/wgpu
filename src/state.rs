@@ -12,8 +12,8 @@ pub struct State<'a> {
     //simulation: GravitySimulation,
     //simulation: CollisionSimulation,
     //simulation: VerletIntegration,
-    simulation: VerletCollisionSimulation,
-    //simulation: ParticleFireSimulation,
+    //simulation: VerletCollisionSimulation,
+    simulation: ParticleFireSimulation,
 
     instance_buffer: wgpu::Buffer,
     vertex_buffer: wgpu::Buffer,
@@ -31,8 +31,8 @@ impl <'a> State <'a> {
         //let simulation = CollisionSimulation::new();
         //let simulation = GravitySimulation::new();
         //let simulation = VerletIntegration::new();
-        let simulation = VerletCollisionSimulation::new();
-        //let simulation = ParticleFireSimulation::new();
+        //let simulation = VerletCollisionSimulation::new();
+        let simulation = ParticleFireSimulation::new();
     
         let vertex_buffer = ctx.create_buffer(
             "Circle vertex buffer", bytemuck::cast_slice(&simulation.vertices),
