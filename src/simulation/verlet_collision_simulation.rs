@@ -1,11 +1,16 @@
 use std::time::{Duration, Instant};
 use cgmath::Vector3;
-use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
-use super::{util::{generate_random_colors, MAX_INSTANCES}, verlet_integration::VerletIntegration};
+use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle, simulation::solvers::spatial_subdivision::spatial_subdivision_solver};
+use super::{circle_constraint, util::{generate_random_colors, MAX_INSTANCES}};
 
 pub struct VerletCollisionSimulation {
-    engine: VerletIntegration,
+    positions: Vec<Vector3<f32>>,
+    prev_positions: Vec<Vector3<f32>>,
+    acceleration: Vec<Vector3<f32>>, 
+    radii: Vec<f32>,
     
+    num_solver_steps: u32,
+
     num_active_instances: u32,
     target_num_instances: u32,
 
@@ -32,15 +37,7 @@ impl VerletCollisionSimulation {
         let prev_positions = [Vector3::new(-0.5, 0.2, 0.0); MAX_INSTANCES].to_vec();
         let positions = [Vector3::new(-0.48, 0.22, 0.0); MAX_INSTANCES].to_vec();
         let acceleration = [Vector3::new(0.0, -150.0, 0.0); MAX_INSTANCES].to_vec();
-
-        let mut engine = VerletIntegration::new();
-        engine.use_constraint(super::verlet_integration::circle_constraint);
-        engine.use_solver(super::verlet_integration::SolverType::SpatialSubdivision);
-        engine.set_num_solver_steps(1);
-        engine.set_radii(radii);
-        engine.set_prev_positions(prev_positions);
-        engine.set_positions(positions);
-        engine.set_acceleration(acceleration);
+        let num_solver_steps = 1;
 
         let last_update = Instant::now();
         let last_spawn = Instant::now();
@@ -52,7 +49,11 @@ impl VerletCollisionSimulation {
         let num_indices = (359)*3;
 
         Self {
-            engine,
+            positions,
+            prev_positions,
+            acceleration,
+            radii,
+            num_solver_steps,
             target_num_instances,
             num_active_instances,
             spawn_rate,
@@ -67,11 +68,11 @@ impl VerletCollisionSimulation {
     }
 
     pub fn get_positions(&self) -> &Vec<Vector3<f32>> {
-        self.engine.get_positions()
+        &self.positions
     }
 
     pub fn get_radii(&self) -> &Vec<f32> {
-        self.engine.get_radii()
+        &self.radii
     }
 
     pub fn get_num_active_instances(&self) -> u32 {
@@ -84,7 +85,24 @@ impl VerletCollisionSimulation {
 
 
     pub fn update(&mut self) {
-        self.engine.update(self.dt);
+        // Update positions
+        for i in 0..self.num_active_instances as usize {
+            let velocity = self.positions[i] - self.prev_positions[i];
+            self.prev_positions[i] = self.positions[i];
+            self.positions[i] = self.positions[i] + velocity + self.acceleration[i] * self.dt*self.dt;   
+        }
+
+        // Constraints
+        for i in 0..self.num_active_instances  as usize {
+            circle_constraint(&mut self.positions[i], &self.radii[i]);
+        }
+        
+        // Solve collisions
+        let pos_slice = &mut self.positions[0..self.num_active_instances as usize];
+        let rad_slice = &mut self.radii[0..self.num_active_instances as usize];
+        for _ in 0..self.num_solver_steps {
+            spatial_subdivision_solver( pos_slice, rad_slice);
+        }
 
         if self.num_active_instances == self.target_num_instances {
             return;
@@ -107,7 +125,6 @@ impl VerletCollisionSimulation {
     fn spawn(&mut self, now: Instant) {
         let spawn_diff = now - self.last_spawn;
         if spawn_diff > self.spawn_rate {
-            self.engine.spawn_one_instance();
             self.num_active_instances += 1;
             self.last_spawn = now;
         }

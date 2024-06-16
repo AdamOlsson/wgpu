@@ -1,17 +1,22 @@
 use std::time::Instant;
 
-use cgmath::{MetricSpace, Vector3};
+use cgmath::Vector3;
 use rand::Rng;
 
-use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
+use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle, simulation::{box_constraint, solvers::{self, spatial_subdivision::spatial_subdivision_solver}}};
 
-use super::verlet_integration::VerletIntegration;
-
+use super::util::generate_random_colors;
 
 pub struct ParticleFireSimulation{
-    engine: VerletIntegration,
-    
-    target_num_instances: u32,
+    //engine: VerletIntegration,
+    positions: Vec<Vector3<f32>>,
+    prev_positions: Vec<Vector3<f32>>,
+    acceleration: Vec<Vector3<f32>>, 
+    radii: Vec<f32>,
+
+    num_solver_steps: u32,
+
+    num_instances: u32,
 
     last_update: Instant,
     dt: f32,
@@ -30,6 +35,7 @@ impl ParticleFireSimulation {
         let num_rows = 32;
         let num_cols = 29;
         let common_radius = 0.03;
+        let num_solver_steps = 3;
         let target_num_instances: u32 = num_rows * num_cols;
         
         let radii = Self::generate_random_radii(target_num_instances, common_radius, 0.0);
@@ -38,36 +44,31 @@ impl ParticleFireSimulation {
         let positions = prev_positions.clone();
         let acceleration = vec![Vector3::new(0.0, -150.0, 0.0); target_num_instances as usize];
 
-        let mut engine = VerletIntegration::new();
-        engine.use_constraint(super::verlet_integration::box_constraint);
-        engine.use_solver(super::verlet_integration::SolverType::SpatialSubdivision);
-        engine.set_num_solver_steps(3);
-        engine.set_radii(radii);
-        engine.set_prev_positions(prev_positions);
-        engine.set_positions(positions);
-        engine.set_acceleration(acceleration);
-        engine.spawn_all_instances();
-
         let last_update = Instant::now();
         let dt = 0.001;
         
         let mut temperature = vec![0.0; target_num_instances as usize];
-        let mut colors = vec![];
-        for i in 0..temperature.len() {
-            if i % num_cols as usize == 0 {
-                temperature[i] = 1000.0;
-                colors.push(Vector3::new( f32::clamp(temperature[i], 0.0, 255.0), 0.0, 0.0));
-            } else {
-                colors.push(Vector3::new( 0.0, 0.0, 0.0));
-            }
-        }
+        let mut colors = generate_random_colors().to_vec();
+        // for i in 0..temperature.len() {
+        //     if i % num_cols as usize == 0 {
+        //         temperature[i] = 1000.0;
+        //         colors.push(Vector3::new( f32::clamp(temperature[i], 0.0, 255.0), 0.0, 0.0));
+        //     } else {
+        //         colors.push(Vector3::new( 0.0, 0.0, 0.0));
+        //     }
+        // }
         let indices = Circle::compute_indices();
         let vertices = Circle::compute_vertices([0.0,0.0,0.0], 1.0);
         let num_indices = (359)*3;
 
         Self {
-            engine,
-            target_num_instances,
+            //engine,
+            positions,
+            prev_positions,
+            acceleration,
+            radii,
+            num_solver_steps,
+            num_instances: target_num_instances,
             last_update,
             dt,
             temperature,
@@ -106,7 +107,21 @@ impl ParticleFireSimulation {
     }
 
     pub fn update(&mut self) {
-        self.engine.update(self.dt);
+        for i in 0..self.num_instances as usize {
+            let velocity = self.positions[i] - self.prev_positions[i];
+            self.prev_positions[i] = self.positions[i];
+            self.positions[i] = self.positions[i] + velocity + self.acceleration[i] * self.dt*self.dt;   
+        }
+
+        // Constraints
+        for i in 0..self.num_instances  as usize {
+            box_constraint(&mut self.positions[i], &self.radii[i]);
+        }
+
+        for _ in 0..self.num_solver_steps {
+            spatial_subdivision_solver(&mut self.positions, &self.radii);
+        }
+        
 
         let now = Instant::now();
         let time_diff = now - self.last_update;
@@ -114,51 +129,51 @@ impl ParticleFireSimulation {
         self.last_update = now;
 
 
-        let positions = self.engine.get_positions();
-        let radii = self.engine.get_radii();
-        let num_instances = positions.len();
-        let mut total_temperature_delta = vec![0.0; positions.len()];
-        let temp_delta = 1.0/10000.0;
-        for i in 0..num_instances {
-            let pos_a = positions[i];
-            let rad_a = radii[i];
-            for j in (i+1)..num_instances {
-                let pos_b = positions[j];
-                let rad_b = radii[j];
-                let dist = pos_a.distance2(pos_b);
-                if dist <= (rad_a + rad_b).powi(2) {
-                    // transfer heat
-                    if self.temperature[i] < self.temperature[j] {
-                        total_temperature_delta[i] += temp_delta;
-                        total_temperature_delta[j] -= temp_delta;
-                    } else if self.temperature[i] > self.temperature[j] {
-                        total_temperature_delta[i] -= temp_delta;
-                        total_temperature_delta[j] += temp_delta;
-                    }
-                }
-            }
-        }
-        for (i, t) in total_temperature_delta.iter().enumerate() {
-            self.temperature[i] += t;
-            self.colors[i] = Vector3::new(self.temperature[i].clamp(0.0, 255.0) as f32, 0.0, 0.0);
-        }
+        // let positions = self.engine.get_positions();
+        // let radii = self.engine.get_radii();
+        // let num_instances = positions.len();
+        // let mut total_temperature_delta = vec![0.0; positions.len()];
+        // let temp_delta = 1.0/10000.0;
+        // for i in 0..num_instances {
+        //     let pos_a = positions[i];
+        //     let rad_a = radii[i];
+        //     for j in (i+1)..num_instances {
+        //         let pos_b = positions[j];
+        //         let rad_b = radii[j];
+        //         let dist = pos_a.distance2(pos_b);
+        //         if dist <= (rad_a + rad_b).powi(2) {
+        //             // transfer heat
+        //             if self.temperature[i] < self.temperature[j] {
+        //                 total_temperature_delta[i] += temp_delta;
+        //                 total_temperature_delta[j] -= temp_delta;
+        //             } else if self.temperature[i] > self.temperature[j] {
+        //                 total_temperature_delta[i] -= temp_delta;
+        //                 total_temperature_delta[j] += temp_delta;
+        //             }
+        //         }
+        //     }
+        // }
+        // for (i, t) in total_temperature_delta.iter().enumerate() {
+        //     self.temperature[i] += t;
+        //     self.colors[i] = Vector3::new(self.temperature[i].clamp(0.0, 255.0) as f32, 0.0, 0.0);
+        // }
 
-        println!("fps: {} seconds, num_objects: {}", fps, self.target_num_instances);
+        println!("fps: {} seconds, num_objects: {}", fps, self.num_instances);
     }
 
     pub fn get_positions(&self) -> &Vec<Vector3<f32>> {
-        self.engine.get_positions()
+        &self.positions
     }
 
     pub fn get_radii(&self) -> &Vec<f32> {
-        self.engine.get_radii()
+        &self.radii
     }
 
     pub fn get_num_active_instances(&self) -> u32 {
-        self.target_num_instances
+        self.num_instances
     }
 
     pub fn get_target_num_instances(&self) -> u32 {
-        self.target_num_instances
+        self.num_instances
     }
 }

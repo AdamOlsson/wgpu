@@ -1,7 +1,5 @@
 mod renderer_backend;
-mod util;
 mod texture;
-mod world;
 mod shapes;
 mod state;
 mod simulation;
