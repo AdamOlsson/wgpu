@@ -1,7 +1,7 @@
 use winit::window::Window;
 
-use crate::{renderer_backend::{graphics_context::GraphicsContext, instance::Instance, render_pass::RenderPass, Pass}, simulation::{particle_fire_simulation::ParticleFireSimulation, verlet_collision_simulation::VerletCollisionSimulation}};
-
+use crate::{engine::simulation::Simulation, renderer_backend::{graphics_context::GraphicsContext, instance::Instance, render_pass::RenderPass, Pass}};
+use crate::engine::simulation::FireSimulation;
 
 pub struct State<'a> {
     pub window: &'a Window,
@@ -9,11 +9,7 @@ pub struct State<'a> {
     pass: RenderPass,
     size: winit::dpi::PhysicalSize<u32>,
 
-    //simulation: GravitySimulation,
-    //simulation: CollisionSimulation,
-    //simulation: VerletIntegration,
-    //simulation: VerletCollisionSimulation,
-    simulation: ParticleFireSimulation,
+    simulation: FireSimulation,
 
     instance_buffer: wgpu::Buffer,
     vertex_buffer: wgpu::Buffer,
@@ -27,13 +23,9 @@ impl <'a> State <'a> {
         let mut ctx = GraphicsContext::new(&window).await;
 
         let pass = RenderPass::new(&ctx.device);
-        
-        //let simulation = CollisionSimulation::new();
-        //let simulation = GravitySimulation::new();
-        //let simulation = VerletIntegration::new();
-        //let simulation = VerletCollisionSimulation::new();
-        let simulation = ParticleFireSimulation::new();
-    
+
+        let simulation = FireSimulation::new();
+
         let vertex_buffer = ctx.create_buffer(
             "Circle vertex buffer", bytemuck::cast_slice(&simulation.vertices),
             wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST);
@@ -42,13 +34,14 @@ impl <'a> State <'a> {
                 "Circle index buffer", bytemuck::cast_slice(&simulation.indices),
                 wgpu::BufferUsages::INDEX);
         
-        let positions = simulation.get_positions();
-        let radii = simulation.get_radii();
+        let bodies = simulation.get_bodies();
+        //let positions = simulation.get_positions();
+        //let radii = simulation.get_radii();
         let instances = (0..simulation.get_target_num_instances() as usize).map(
             |i| Instance {
-                position: positions[i].into(),
+                position: bodies[i].position.into(),
                 color: simulation.colors[i].into(),
-                radius: radii[i],
+                radius: bodies[i].radius,
             }).collect::<Vec<_>>();
 
         let instance_buffer = ctx.create_buffer(
@@ -73,13 +66,14 @@ impl <'a> State <'a> {
     pub fn update(&mut self) {
         self.simulation.update();
 
-        let positions = self.simulation.get_positions();
-        let radii = self.simulation.get_radii();
+        //let positions = self.simulation.get_positions();
+        //let radii = self.simulation.get_radii();
+        let bodies = self.simulation.get_bodies();
         let instances = (0..self.simulation.get_target_num_instances() as usize).map(
             |i| Instance {
-                position: positions[i].into(),
+                position: bodies[i].position.into(),
                 color: self.simulation.colors[i].into(),
-                radius: radii[i],
+                radius: bodies[i].radius,
             }.to_raw()).collect::<Vec<_>>();
 
         // To prevent writing the static colors every run, we probably can use a global buffer and write 
