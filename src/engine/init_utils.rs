@@ -33,6 +33,32 @@ pub(crate) fn generate_random_colors(n: u32) -> Vec<Vector3<f32>> {
     colors
 }
 
+pub(crate) fn create_grid_positions(num_rows: u32, num_cols: u32, spacing: f32) -> Vec<Vector3<f32>> {
+    let mut positions = Vec::new();
+    let mut rng = rand::thread_rng();
+    for i in 0..num_rows {
+        for j in 0..num_cols {
+            let mut x = (i as f32 - num_rows as f32 / 2.0) * spacing;
+            let y = (j as f32 - num_cols as f32 / 2.0) * spacing;
+            x += rng.gen_range(-0.01..0.01);
+            positions.push(Vector3::new(x, y, 0.0));
+        }
+    }
+    positions
+}
+
+pub(crate) fn generate_random_radii(num_instances: u32, base_radius: f32, variance: f32) -> Vec<f32> {
+    if variance == 0.0 {
+        return vec![base_radius; num_instances as usize];
+    }
+    let mut rng = rand::thread_rng();
+    let mut radii = Vec::new();
+    for _ in 0..num_instances {
+        let radius = base_radius + rng.gen_range(-variance.abs()..variance.abs());
+        radii.push(radius);
+    }
+    return radii;
+}
 // pub(crate) fn generate_random_velocities() -> [Vector3<f32>; MAX_INSTANCES] {
 //     let mut velocities = [Vector3::new(0.0, 0.0, 0.0); MAX_INSTANCES];
 //     let mut rng = rand::thread_rng();

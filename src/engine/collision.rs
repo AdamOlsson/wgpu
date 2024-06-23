@@ -49,8 +49,7 @@ impl CollisionCandidates {
 
 
 pub trait CollisionHandler {
-    fn handle_collision<S>(&self, state: &mut S, idx1: usize, idx2: usize) 
-    where S: State;
+    fn handle_collision(&self, bodies: &mut Vec<CollisionBody>, idx_i: usize, idx_j: usize);
 }
 
 pub struct SimpleCollisionSolver {}
@@ -60,10 +59,8 @@ impl SimpleCollisionSolver {
     }
 }
 impl CollisionHandler for SimpleCollisionSolver {
-    fn handle_collision<S>(&self, state: &mut S, idx_i: usize, idx_j: usize) 
-    where S: State
+    fn handle_collision(&self, bodies: &mut Vec<CollisionBody>, idx_i: usize, idx_j: usize) 
     {
-        let bodies = state.get_bodies_mut();
         let body_i = &bodies[idx_i];
         let body_j = &bodies[idx_j];
         let collision_axis = body_i.position - body_j.position;

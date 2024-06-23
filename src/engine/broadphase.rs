@@ -1,7 +1,7 @@
 use super::{collision::{CollisionBody, CollisionCandidates}, State};
 
 pub trait BroadPhase {
-    fn collision_detection<S: State>(&self, state: &S) -> Vec<CollisionCandidates>;
+    fn collision_detection(&self, bodies: &Vec<CollisionBody>) -> Vec<CollisionCandidates>;
 }
 
 pub struct SpatialSubdivision {}
@@ -46,8 +46,7 @@ impl SpatialSubdivision {
 
 impl BroadPhase for SpatialSubdivision {
 
-    fn collision_detection<S: State>(&self, state: &S) -> Vec<CollisionCandidates>  {
-        let bodies = state.get_bodies(); // FIXME: Make a state.get_bodies_mut()
+    fn collision_detection(&self, bodies: &Vec<CollisionBody>) -> Vec<CollisionCandidates>  {
         
         if bodies.len() == 0 {
             return vec![]; 

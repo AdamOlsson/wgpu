@@ -28,7 +28,7 @@ impl Engine {
         D: NarrowPhase,
         H: CollisionHandler
     {
-        detector.collision_detection(state, candidates, handler);
+        //detector.collision_detection(state, candidates, handler);
     }
 
 
