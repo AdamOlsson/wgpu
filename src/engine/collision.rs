@@ -1,8 +1,6 @@
 
 use cgmath::{InnerSpace, Vector3};
 
-use super::State;
-
 pub struct CollisionBody {
     pub position: Vector3<f32>,
     pub radius: f32
@@ -17,22 +15,8 @@ impl CollisionBody {
     }
 }
 
-pub struct CollisionPair {
-    pub body_1: usize,
-    pub body_2: usize
-}
-
-impl CollisionPair {
-    pub fn new() -> Self {
-        Self {
-            body_1: 0,
-            body_2: 1,
-        }
-    }
-}
 
 pub struct CollisionCandidates {
-//    candidates: Vec<&'a CollisionBody>
     pub indices: Vec<usize>
 }
 

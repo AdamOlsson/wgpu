@@ -1,6 +1,6 @@
 use std::iter::zip;
 
-use cgmath::Vector3;
+use cgmath::{MetricSpace, Vector3};
 
 use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
 
@@ -22,7 +22,7 @@ pub struct FireState {
 
     num_instances: u32,
 
-    heat: Vec<f32>,
+    temperatures: Vec<f32>,
     bodies: Vec<CollisionBody>,
 }
 
@@ -40,13 +40,20 @@ impl FireState {
         let acceleration = vec![Vector3::new(0.0, -150.0, 0.0); target_num_instances as usize];
 
         let bodies: Vec<CollisionBody> = zip(positions, radii).map(|(p, r)| CollisionBody::new(p, r)).collect();
+        
+        let mut temperatures = vec![0.0; target_num_instances as usize];
+        for i in 0..temperatures.len() {
+            if i % num_cols as usize == 0 {
+                temperatures[i] = 1000.0;
+            }
+        }
 
         Self {
             bodies,
             prev_positions,
             acceleration,
             num_instances: target_num_instances,
-            heat: vec![],
+            temperatures,
         }
     }
 }
@@ -66,6 +73,7 @@ pub struct FireSimulation {
     dt: f32,
 
     // FIXME: Eventually move these out of the simulation
+    color_spectrum: ColorSpectrum,
     pub colors: Vec<Vector3<f32>>,
     pub indices: Vec<u16>,
     pub vertices: Vec<Vertex>,
@@ -77,24 +85,37 @@ impl Simulation for FireSimulation {
         let engine = Engine::new();
         let state = FireState::new();
         let dt = 0.001;
-        let colors = generate_random_colors(state.get_bodies().len() as u32);
+        let black = Vector3::new(31.0, 17.0, 15.0);
+        let red = Vector3::new(231.0, 24.0, 24.0); 
+        let orange = Vector3::new(231.0, 110.0, 24.0);
+        let yellow = Vector3::new(249.0, 197.0, 26.0);
+        let white = Vector3::new(254.0, 244.0, 210.0);
+        let color_spectrum = ColorSpectrum::new(vec![black, red, orange, yellow, white]);
+
+        let mut colors = vec![color_spectrum.get(0); state.num_instances as usize];
+        let color_spectrum_len = color_spectrum.len();
+        for i in 0..state.num_instances as usize {
+            let index = (state.temperatures[i] as usize).min(color_spectrum_len - 1);
+            colors[i] = color_spectrum.get(index);
+        }
+
         let indices = Circle::compute_indices();
         let vertices = Circle::compute_vertices([0.0,0.0,0.0], 1.0);
         let num_indices = (359)*3;
         Self {
-            engine, state, dt,
+            engine, state, dt, color_spectrum,
             colors, indices, vertices, num_indices
         }
     }
 
     fn update(&mut self) {
-        let state = &mut self.state; 
-        let bodies = &mut state.bodies;
+        let num_instances = self.state.num_instances;
+        let bodies = &mut self.state.bodies;
         // Update positions
-        for i in 0..state.num_instances as usize {
-            let velocity = bodies[i].position -  state.prev_positions[i];
-            state.prev_positions[i] = bodies[i].position;
-            bodies[i].position = bodies[i].position + velocity + state.acceleration[i] * self.dt*self.dt;   
+        for i in 0..num_instances as usize {
+            let velocity = bodies[i].position -  self.state.prev_positions[i];
+            self.state.prev_positions[i] = bodies[i].position;
+            bodies[i].position = bodies[i].position + velocity + self.state.acceleration[i] * self.dt*self.dt;   
         }
 
         let constraint = BoxConstraint::new();
@@ -102,7 +123,6 @@ impl Simulation for FireSimulation {
         let narrowphase = Naive::new();
         let collision_solver = SimpleCollisionSolver::new();
 
-        let num_instances = bodies.len(); // FIXME: Use states num_instances
         for _ in 0..3 {
             for i in 0..num_instances as usize {
                 constraint.apply_constraint(&mut bodies[i]);
@@ -115,9 +135,29 @@ impl Simulation for FireSimulation {
             }
         }
 
-        // TODO: Perform broad and narrow phase and find out which bodies are touching
-        //let touching_candidates = Engine::broad_phase_collision_detection(&self.state, &broadphase); 
-        // perform specific body interactions
+        // Heat transfer
+        let temp_delta = 1.0/10.0;
+        let mut temperature_transfer = vec![0.0; num_instances as usize];
+        for i in 0..num_instances as usize {
+            for j in (i+1)..num_instances as usize {
+                let dist = bodies[i].position.distance2(bodies[j].position);
+                if  dist <= (bodies[i].radius + bodies[j].radius).powi(2) {
+                    if self.state.temperatures[i] < self.state.temperatures[j] {
+                        temperature_transfer[i] += temp_delta;
+                        temperature_transfer[j] -= temp_delta;
+                    } else if self.state.temperatures[i] > self.state.temperatures[j] {
+                        temperature_transfer[i] -= temp_delta;
+                        temperature_transfer[j] += temp_delta;
+                    }
+                }
+            }
+        }
+        let color_spectrum_len = self.color_spectrum.len();
+        for (i, t) in temperature_transfer.iter().enumerate() {
+            self.state.temperatures[i] += f32::max(*t, 0.0);
+            let index = (self.state.temperatures[i] as usize).min(color_spectrum_len - 1);
+            self.colors[i] = self.color_spectrum.get(index); 
+        }
     }
 
     fn get_bodies(&self) -> &Vec<CollisionBody> {
@@ -138,5 +178,41 @@ impl Simulation for FireSimulation {
 
     fn get_target_num_instances(&self) -> u32 {
         self.state.num_instances
+    }
+}
+
+struct ColorSpectrum {
+    spectrum: Vec<Vector3<f32>>,
+}
+impl ColorSpectrum {
+    pub fn new(key_colors: Vec<Vector3<f32>>) -> Self {
+        let mut spectrum = vec![];
+        for i in 0..(key_colors.len() -1) {
+            let color1 = key_colors[i];
+            let color2 = key_colors[i+1];
+            let colors = Self::interpolate(color1, color2, 100);
+            spectrum.extend(colors);
+        }
+        Self {
+            spectrum
+        }
+    }
+
+    pub fn get(&self, index: usize) -> Vector3<f32> {
+        self.spectrum[index]
+    }
+
+    pub fn len(&self) -> usize {
+        self.spectrum.len()
+    }
+    fn interpolate(color1: Vector3<f32>, color2: Vector3<f32>, num_steps: u32) -> Vec<Vector3<f32>> {
+        let mut colors = vec![];
+        for i in 0..num_steps {
+            let t = i as f32 / num_steps as f32;
+            let color = (color1 + (color2 - color1) * t)/255.0;
+            println!("Color: {:?}", color);
+            colors.push(color);
+        }
+        colors
     }
 }
