@@ -34,9 +34,7 @@ async fn run() {
     event_loop.run(
         move | event, elwt | match event {
             Event::UserEvent(..) => {
-                let start = Instant::now();
                 state.update();
-                let duration = start.elapsed();
                 state.render().unwrap();
             }
             Event::WindowEvent {

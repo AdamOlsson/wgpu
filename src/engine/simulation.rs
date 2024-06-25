@@ -1,10 +1,7 @@
 use std::iter::zip;
-
 use cgmath::{MetricSpace, Vector3};
-
 use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
-
-use super::{broadphase::{BroadPhase, SpatialSubdivision}, collision::{CollisionBody, SimpleCollisionSolver}, constraint::{BoxConstraint, Constraint}, engine::Engine, init_utils::{create_grid_positions, generate_random_colors, generate_random_radii}, narrowphase::{Naive, NarrowPhase}, State};
+use super::{broadphase::{BroadPhase, SpatialSubdivision}, collision::{CollisionBody, SimpleCollisionSolver}, constraint::{BoxConstraint, Constraint}, engine::Engine, init_utils::{create_grid_positions, generate_random_radii}, narrowphase::{Naive, NarrowPhase}, State};
 
 pub trait Simulation {
     fn new() -> Self;
@@ -80,6 +77,33 @@ pub struct FireSimulation {
     pub num_indices: u32,
 }
 
+impl FireSimulation {
+    #[allow(non_snake_case)]
+    fn conduct_heat(bodies: &Vec<CollisionBody>, temperatures: &Vec<f32>, dt: f32) -> Vec<f32> {
+        let num_instances = bodies.len();
+        let k = 1.0; // thermal conductivity
+        let A = 0.1; // cross sectional area of touch
+        let m1 = 1.0; // mass
+        let m2 = 1.0; // mass
+        let c1 = 1.0; // Heat capacity
+        let c2 = 1.0; // Heat capacity
+        let mut thermal_delta = vec![0.0; num_instances ];
+        for i in 0..num_instances {
+            for j in (i+1)..num_instances {
+                let dist = bodies[i].position.distance2(bodies[j].position);
+                if dist <= (bodies[i].radius + bodies[j].radius).powi(2) {
+                    let dT = temperatures[i] - temperatures[j];
+                    let dT1dt = -(k*A*dT)/(dist.sqrt()*m1*c1);
+                    let dT2dt = (k*A*dT)/(dist.sqrt()*m2*c2);
+                    thermal_delta[i] += dT1dt*dt;
+                    thermal_delta[j] += dT2dt*dt;
+                }
+            }
+        }
+        return thermal_delta;
+    }
+}
+
 impl Simulation for FireSimulation {
     fn new() -> Self {
         let engine = Engine::new();
@@ -136,29 +160,16 @@ impl Simulation for FireSimulation {
         }
 
         // Heat transfer
-        let temp_delta = 1.0/10.0;
-        let mut temperature_transfer = vec![0.0; num_instances as usize];
-        for i in 0..num_instances as usize {
-            for j in (i+1)..num_instances as usize {
-                let dist = bodies[i].position.distance2(bodies[j].position);
-                if  dist <= (bodies[i].radius + bodies[j].radius).powi(2) {
-                    if self.state.temperatures[i] < self.state.temperatures[j] {
-                        temperature_transfer[i] += temp_delta;
-                        temperature_transfer[j] -= temp_delta;
-                    } else if self.state.temperatures[i] > self.state.temperatures[j] {
-                        temperature_transfer[i] -= temp_delta;
-                        temperature_transfer[j] += temp_delta;
-                    }
-                }
-            }
-        }
+        let thermal_delta = Self::conduct_heat(&bodies, &self.state.temperatures, self.dt);
         let color_spectrum_len = self.color_spectrum.len();
-        for (i, t) in temperature_transfer.iter().enumerate() {
+        for (i, t) in thermal_delta.iter().enumerate() {
             self.state.temperatures[i] += f32::max(*t, 0.0);
             let index = (self.state.temperatures[i] as usize).min(color_spectrum_len - 1);
             self.colors[i] = self.color_spectrum.get(index); 
         }
     }
+
+    
 
     fn get_bodies(&self) -> &Vec<CollisionBody> {
         self.state.get_bodies()
@@ -210,7 +221,6 @@ impl ColorSpectrum {
         for i in 0..num_steps {
             let t = i as f32 / num_steps as f32;
             let color = (color1 + (color2 - color1) * t)/255.0;
-            println!("Color: {:?}", color);
             colors.push(color);
         }
         colors
