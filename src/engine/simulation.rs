@@ -1,9 +1,10 @@
-use std::iter::zip;
+use std::{iter::zip, time::Instant};
 use cgmath::{MetricSpace, Vector3};
 use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
 use super::{broadphase::{BroadPhase, SpatialSubdivision}, collision::{CollisionBody, SimpleCollisionSolver}, constraint::{BoxConstraint, Constraint}, engine::Engine, init_utils::{create_grid_positions, generate_random_radii}, narrowphase::{Naive, NarrowPhase}, State};
 
 pub trait Simulation {
+
     fn new() -> Self;
     fn update(&mut self);
     fn get_bodies(&self) -> &Vec<CollisionBody>;
@@ -11,6 +12,8 @@ pub trait Simulation {
     fn get_radii(&self) -> &Vec<f32>;
     fn get_num_active_instances(&self) -> u32;
     fn get_target_num_instances(&self) -> u32;
+
+    fn log_performance(&mut self);
 }
 
 pub struct FireState {
@@ -65,11 +68,16 @@ impl State for FireState {
 }
 
 pub struct FireSimulation {
+    // Simulation information
     engine: Engine,
     state: FireState,
     dt: f32,
 
-    // FIXME: Eventually move these out of the simulation
+    // Performance information
+    timer: Instant,
+    update_count: u32,
+
+    // Render information 
     color_spectrum: ColorSpectrum,
     pub colors: Vec<Vector3<f32>>,
     pub indices: Vec<u16>,
@@ -126,13 +134,18 @@ impl Simulation for FireSimulation {
         let indices = Circle::compute_indices();
         let vertices = Circle::compute_vertices([0.0,0.0,0.0], 1.0);
         let num_indices = (359)*3;
+
+        let timer = Instant::now();
+        let update_count = 0;
+
         Self {
-            engine, state, dt, color_spectrum,
+            engine, state, dt, color_spectrum, timer, update_count,
             colors, indices, vertices, num_indices
         }
     }
 
     fn update(&mut self) {
+        self.log_performance();
         let num_instances = self.state.num_instances;
         let bodies = &mut self.state.bodies;
         // Update positions
@@ -169,7 +182,17 @@ impl Simulation for FireSimulation {
         }
     }
 
-    
+    fn log_performance(&mut self) {
+        self.update_count += 1;
+        let now = Instant::now();
+        let diff = now.duration_since(self.timer);
+        if diff.as_millis() > 1000 {
+            let fps = self.update_count / diff.as_secs() as u32; 
+            println!("fps: {}", fps);
+            self.update_count = 0;
+            self.timer = now;
+        }
+    }
 
     fn get_bodies(&self) -> &Vec<CollisionBody> {
         self.state.get_bodies()

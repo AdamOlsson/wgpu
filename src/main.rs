@@ -4,9 +4,6 @@ mod shapes;
 mod state;
 mod engine;
 
-
-use std::{thread, time::Instant};
-
 use winit::{
     dpi::PhysicalSize, event::*, event_loop::EventLoopBuilder, keyboard::{KeyCode, PhysicalKey}, window::WindowBuilder
 };
