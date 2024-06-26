@@ -43,12 +43,7 @@ impl FireState {
 
         let bodies: Vec<CollisionBody> = zip(positions, radii).map(|(p, r)| CollisionBody::new(p, r)).collect();
         
-        let mut temperatures = vec![0.0; target_num_instances as usize];
-        for i in 0..temperatures.len() {
-            if (i  as u32) <  num_cols  {
-                temperatures[i] = 1000.0;
-            }
-        }
+        let temperatures = vec![0.0; target_num_instances as usize];
 
         Self {
             bodies,
@@ -175,6 +170,14 @@ impl Simulation for FireSimulation {
             }
         }
 
+        // Bottom of the screen heats the objects
+        let threshold = 0.1;
+        for i in 0..num_instances as usize {
+            if bodies[i].position.y < (-1.0 + threshold) {
+                self.state.temperatures[i] += 200.0;
+            }
+        }
+
         // Heat transfer
         let thermal_delta = Self::conduct_heat(&bodies, &self.state.temperatures, self.dt);
         let color_spectrum_len = self.color_spectrum.len();
@@ -182,6 +185,7 @@ impl Simulation for FireSimulation {
             self.state.temperatures[i] += f32::max(*t, 0.0);
             let index = (self.state.temperatures[i] as usize).min(color_spectrum_len - 1);
             self.colors[i] = self.color_spectrum.get(index); 
+            
         }
     }
 
