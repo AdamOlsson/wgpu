@@ -28,14 +28,16 @@ pub struct FireState {
 
 impl FireState {
     pub fn new() -> Self {
-        let num_rows = 10;
-        let num_cols = 10;
+        let num_rows = 18;
+        let num_cols = 18;
         let common_radius = 0.05;
+        let initial_spacing = (common_radius * 2.0) + 0.01;
+        let initial_spacing_var = 0.001;
         let target_num_instances: u32 = num_rows * num_cols;
 
         let radii = generate_random_radii(target_num_instances, common_radius, 0.0);
 
-        let prev_positions = create_grid_positions(num_rows, num_cols, 0.11);
+        let prev_positions = create_grid_positions(num_rows, num_cols, initial_spacing, Some(initial_spacing_var));
         let positions = prev_positions.clone();
         let acceleration = vec![Vector3::new(0.0, -150.0, 0.0); target_num_instances as usize];
 
@@ -43,7 +45,7 @@ impl FireState {
         
         let mut temperatures = vec![0.0; target_num_instances as usize];
         for i in 0..temperatures.len() {
-            if i % num_cols as usize == 0 {
+            if (i  as u32) <  num_cols  {
                 temperatures[i] = 1000.0;
             }
         }
@@ -90,16 +92,17 @@ impl FireSimulation {
     fn conduct_heat(bodies: &Vec<CollisionBody>, temperatures: &Vec<f32>, dt: f32) -> Vec<f32> {
         let num_instances = bodies.len();
         let k = 1.0; // thermal conductivity
-        let A = 0.1; // cross sectional area of touch
+        let A = 0.8; // cross sectional area of touch
         let m1 = 1.0; // mass
         let m2 = 1.0; // mass
         let c1 = 1.0; // Heat capacity
         let c2 = 1.0; // Heat capacity
+        let threshold = 0.01;
         let mut thermal_delta = vec![0.0; num_instances ];
         for i in 0..num_instances {
             for j in (i+1)..num_instances {
                 let dist = bodies[i].position.distance2(bodies[j].position);
-                if dist <= (bodies[i].radius + bodies[j].radius).powi(2) {
+                if (dist - threshold) <= (bodies[i].radius + bodies[j].radius).powi(2) {
                     let dT = temperatures[i] - temperatures[j];
                     let dT1dt = -(k*A*dT)/(dist.sqrt()*m1*c1);
                     let dT2dt = (k*A*dT)/(dist.sqrt()*m2*c2);
