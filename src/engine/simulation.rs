@@ -28,9 +28,9 @@ pub struct FireState {
 
 impl FireState {
     pub fn new() -> Self {
-        let num_rows = 18;
-        let num_cols = 18;
-        let common_radius = 0.05;
+        let num_rows = 30;
+        let num_cols = 30;
+        let common_radius = 0.02;
         let initial_spacing = (common_radius * 2.0) + 0.01;
         let initial_spacing_var = 0.001;
         let target_num_instances: u32 = num_rows * num_cols;
@@ -41,7 +41,8 @@ impl FireState {
         let positions = prev_positions.clone();
         let acceleration = vec![Vector3::new(0.0, -150.0, 0.0); target_num_instances as usize];
 
-        let bodies: Vec<CollisionBody> = zip(positions, radii).map(|(p, r)| CollisionBody::new(p, r)).collect();
+
+        let bodies: Vec<CollisionBody> = zip(positions, radii).enumerate().map(|(i, (p, r))| CollisionBody::new(i, p, r)).collect();
         
         let temperatures = vec![0.0; target_num_instances as usize];
 
@@ -83,44 +84,104 @@ pub struct FireSimulation {
 }
 
 impl FireSimulation {
+    const CIRCLE_CONTACT_SURFACE_AREA: f32 = 0.02;
+    const BOTTOM_HEAT_SOURCE_TEMPERATURE: f32 = 50.0;
+    const HEAT_TRANSFER_COEFFICIENT: f32 = 0.009;
+    const BASE_GRAVITY: f32 = 500.0;
+
+    const BLACK: Vector3<f32> = Vector3::new(31.0, 17.0, 15.0);
+    const RED: Vector3<f32> = Vector3::new(231.0, 24.0, 24.0); 
+    const ORANGE: Vector3<f32> = Vector3::new(231.0, 110.0, 24.0);
+    const YELLOW: Vector3<f32> = Vector3::new(249.0, 197.0, 26.0);
+    const WHITE: Vector3<f32> = Vector3::new(254.0, 244.0, 210.0);
     #[allow(non_snake_case)]
-    fn conduct_heat(bodies: &Vec<CollisionBody>, temperatures: &Vec<f32>, dt: f32) -> Vec<f32> {
-        let num_instances = bodies.len();
+    fn heat_conduction(temp1: f32, temp2: f32, distance: f32) -> (f32, f32) {
         let k = 1.0; // thermal conductivity
-        let A = 0.8; // cross sectional area of touch
+        let A = Self::CIRCLE_CONTACT_SURFACE_AREA;
         let m1 = 1.0; // mass
         let m2 = 1.0; // mass
         let c1 = 1.0; // Heat capacity
         let c2 = 1.0; // Heat capacity
-        let threshold = 0.01;
-        let mut thermal_delta = vec![0.0; num_instances ];
-        for i in 0..num_instances {
-            for j in (i+1)..num_instances {
-                let dist = bodies[i].position.distance2(bodies[j].position);
-                if (dist - threshold) <= (bodies[i].radius + bodies[j].radius).powi(2) {
-                    let dT = temperatures[i] - temperatures[j];
-                    let dT1dt = -(k*A*dT)/(dist.sqrt()*m1*c1);
-                    let dT2dt = (k*A*dT)/(dist.sqrt()*m2*c2);
-                    thermal_delta[i] += dT1dt*dt;
-                    thermal_delta[j] += dT2dt*dt;
-                }
+        let dT = (temp1 - temp2).abs();
+        let dT1dt = (k*A*dT)/(distance.sqrt()*m1*c1);
+        let dT2dt = (k*A*dT)/(distance.sqrt()*m2*c2);
+        if temp1 > temp2 {
+            return (-dT1dt, dT2dt);
+        } else {
+            return (dT1dt, -dT2dt);
+        }
+    }
+
+    fn heat_convection(object_temp: f32, fluid_temp: f32, object_radius: f32) -> f32 {
+        let surface_area = 2.0 * std::f32::consts::PI * object_radius; 
+        Self::HEAT_TRANSFER_COEFFICIENT*surface_area*(fluid_temp - object_temp)
+    }
+
+
+    fn heat_transfer(
+        bodies: &Vec<CollisionBody>, temperatures: &Vec<f32>, dt: f32) -> Vec<f32> 
+    {
+        let broadphase = SpatialSubdivision::new();
+        let candidates = broadphase.collision_detection(&bodies);
+        let mut thermal_delta = vec![0.0; bodies.len()];
+        for cs in candidates {
+            let mut candidate_bodies = vec![];
+            let mut candidate_temperatures = vec![];
+            
+            for c in cs.indices.iter() {
+                candidate_bodies.push(bodies[*c].clone());
+                candidate_temperatures.push(temperatures[*c]);
+            }
+            let local_thermal_delta = Self::local_heat_transfer(&candidate_bodies, &candidate_temperatures, 0.0);
+            
+            for (k, c) in cs.indices.iter().enumerate() {
+                thermal_delta[*c] += local_thermal_delta[k];
             }
         }
+        return thermal_delta;
+    }
+
+    /// Calculate the heat transfer due to convection between bodies
+    #[allow(non_snake_case)]
+    fn local_heat_transfer(
+        bodies: &Vec<CollisionBody>, temperatures: &Vec<f32>, dt: f32) -> Vec<f32> 
+    {
+        let num_instances = bodies.len();
+        let mut thermal_delta = vec![0.0; num_instances ];
+
+        for i in 0..num_instances {
+            
+            // Bottom of the screen heats the objects
+            if bodies[i].position.y <= (-1.0 + bodies[i].radius) {
+                let (temp_delta_i, _) = Self::heat_conduction(temperatures[i], Self::BOTTOM_HEAT_SOURCE_TEMPERATURE, bodies[i].radius);
+                thermal_delta[i] += temp_delta_i; 
+            } else {
+                // Loose heat due to convection with air
+                thermal_delta[i] += Self::heat_convection(temperatures[i], 0.0, bodies[i].radius);
+            }
+
+            for j in (i+1)..num_instances {
+                // Heat conduction only happens between touching objects
+                let dist_sq = bodies[i].position.distance2(bodies[j].position);
+                if dist_sq -0.01 <= (bodies[i].radius + bodies[j].radius).powi(2) {
+                    let (temp_delta_i, temp_delta_j) = Self::heat_conduction(temperatures[i], temperatures[j], bodies[i].radius + bodies[j].radius);
+                    thermal_delta[i] += temp_delta_i;
+                    thermal_delta[j] += temp_delta_j;
+                }
+            }
+            }
         return thermal_delta;
     }
 }
 
 impl Simulation for FireSimulation {
+
     fn new() -> Self {
         let engine = Engine::new();
         let state = FireState::new();
         let dt = 0.001;
-        let black = Vector3::new(31.0, 17.0, 15.0);
-        let red = Vector3::new(231.0, 24.0, 24.0); 
-        let orange = Vector3::new(231.0, 110.0, 24.0);
-        let yellow = Vector3::new(249.0, 197.0, 26.0);
-        let white = Vector3::new(254.0, 244.0, 210.0);
-        let color_spectrum = ColorSpectrum::new(vec![black, red, orange, yellow, white]);
+        let color_spectrum = ColorSpectrum::new(vec![
+            Self::BLACK, Self::RED, Self::ORANGE, Self::YELLOW, Self::WHITE]);
 
         let mut colors = vec![color_spectrum.get(0); state.num_instances as usize];
         let color_spectrum_len = color_spectrum.len();
@@ -158,35 +219,54 @@ impl Simulation for FireSimulation {
         let narrowphase = Naive::new();
         let collision_solver = SimpleCollisionSolver::new();
 
+
+        let mut avg_broadphase_time = 0.0;
+        let mut avg_narrowphase_time = 0.0;
+        let mut avg_constraint_time = 0.0;
+        let mut avg_heat_transfer_time = 0.0;
         for _ in 0..3 {
+            // Constraint Application
+            let constraint_start = Instant::now();
             for i in 0..num_instances as usize {
                 constraint.apply_constraint(&mut bodies[i]);
             }
-        
-            // Collision Detection
+            avg_constraint_time += constraint_start.elapsed().as_secs_f32();
+
+            
+            // Broadphase
+            let broadphase_start = Instant::now();
             let candidates = broadphase.collision_detection(&bodies);
+            avg_broadphase_time += broadphase_start.elapsed().as_secs_f32();
+
+            // Narrowphase
+            let narrowphase_start = Instant::now();
             for i in 0..candidates.len() {
                 narrowphase.collision_detection(bodies, &candidates[i], &collision_solver);
             }
-        }
-
-        // Bottom of the screen heats the objects
-        let threshold = 0.1;
-        for i in 0..num_instances as usize {
-            if bodies[i].position.y < (-1.0 + threshold) {
-                self.state.temperatures[i] += 200.0;
-            }
+            avg_narrowphase_time += narrowphase_start.elapsed().as_secs_f32();
         }
 
         // Heat transfer
-        let thermal_delta = Self::conduct_heat(&bodies, &self.state.temperatures, self.dt);
+        let heat_transfer_start = Instant::now();
+        let thermal_delta = Self::heat_transfer(&bodies, &self.state.temperatures, self.dt);
+        avg_heat_transfer_time += heat_transfer_start.elapsed().as_secs_f32();
+
+
+        
         let color_spectrum_len = self.color_spectrum.len();
         for (i, t) in thermal_delta.iter().enumerate() {
-            self.state.temperatures[i] += f32::max(*t, 0.0);
+            self.state.temperatures[i] += t; 
+            self.state.temperatures[i] = self.state.temperatures[i].max(0.0);
             let index = (self.state.temperatures[i] as usize).min(color_spectrum_len - 1);
-            self.colors[i] = self.color_spectrum.get(index); 
-            
+            self.colors[i] = self.color_spectrum.get(index);
+            //self.state.acceleration[i].y = -Self::BASE_GRAVITY + (self.state.temperatures[i].powi(2))/10.0;
         }
+
+        println!("Avg Broadphase Time: {}", avg_broadphase_time/3.0);
+        println!("Avg Narrowphase Time: {}", avg_narrowphase_time/3.0);
+        println!("Avg Constraint Time: {}", avg_constraint_time/3.0);
+        println!("Avg Heat Transfer Time: {}", avg_heat_transfer_time);
+        println!("");
     }
 
     fn log_performance(&mut self) {
