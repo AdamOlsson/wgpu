@@ -2,7 +2,7 @@ use std::{iter::zip, time::Instant};
 use cgmath::{MetricSpace, Vector3};
 use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
 use super::{broadphase::{BroadPhase, SpatialSubdivision}, collision::{CollisionBody, SimpleCollisionSolver}, constraint::{BoxConstraint, Constraint}, engine::Engine, init_utils::{create_grid_positions, generate_random_radii}, narrowphase::{Naive, NarrowPhase}, State};
-
+use rayon::prelude::*;
 pub trait Simulation {
 
     fn new() -> Self;
@@ -28,9 +28,9 @@ pub struct FireState {
 
 impl FireState {
     pub fn new() -> Self {
-        let num_rows = 30;
-        let num_cols = 30;
-        let common_radius = 0.02;
+        let num_rows = 20;
+        let num_cols = 20;
+        let common_radius = 0.03;
         let initial_spacing = (common_radius * 2.0) + 0.01;
         let initial_spacing_var = 0.001;
         let target_num_instances: u32 = num_rows * num_cols;
@@ -40,7 +40,6 @@ impl FireState {
         let prev_positions = create_grid_positions(num_rows, num_cols, initial_spacing, Some(initial_spacing_var));
         let positions = prev_positions.clone();
         let acceleration = vec![Vector3::new(0.0, -150.0, 0.0); target_num_instances as usize];
-
 
         let bodies: Vec<CollisionBody> = zip(positions, radii).enumerate().map(|(i, (p, r))| CollisionBody::new(i, p, r)).collect();
         
@@ -84,8 +83,8 @@ pub struct FireSimulation {
 }
 
 impl FireSimulation {
-    const CIRCLE_CONTACT_SURFACE_AREA: f32 = 0.02;
-    const BOTTOM_HEAT_SOURCE_TEMPERATURE: f32 = 50.0;
+    const CIRCLE_CONTACT_SURFACE_AREA: f32 = 0.005;
+    const BOTTOM_HEAT_SOURCE_TEMPERATURE: f32 = 1500.0;
     const HEAT_TRANSFER_COEFFICIENT: f32 = 0.009;
     const BASE_GRAVITY: f32 = 500.0;
 
@@ -124,20 +123,34 @@ impl FireSimulation {
         let broadphase = SpatialSubdivision::new();
         let candidates = broadphase.collision_detection(&bodies);
         let mut thermal_delta = vec![0.0; bodies.len()];
-        for cs in candidates {
-            let mut candidate_bodies = vec![];
-            let mut candidate_temperatures = vec![];
-            
-            for c in cs.indices.iter() {
-                candidate_bodies.push(bodies[*c].clone());
-                candidate_temperatures.push(temperatures[*c]);
-            }
-            let local_thermal_delta = Self::local_heat_transfer(&candidate_bodies, &candidate_temperatures, 0.0);
-            
-            for (k, c) in cs.indices.iter().enumerate() {
-                thermal_delta[*c] += local_thermal_delta[k];
-            }
-        }
+
+        let candidate_bodies: Vec<Vec<CollisionBody>> = candidates.iter().map(| cs | {
+            cs.indices.iter().map(| idx | (bodies[*idx].clone())).collect()
+        }).collect();
+
+        let candidate_temperatures: Vec<Vec<f32>> = candidates.iter().map(| cs | {
+            cs.indices.iter().map(| idx | (temperatures[*idx])).collect()
+        }).collect();
+
+        // This is still the most expensive operation of heat transfer by far.
+        let thermal_deltas: Vec<Vec<f32>> = 
+            candidate_bodies.par_iter()
+            .zip(candidate_temperatures.par_iter())
+            .map( | (bs, ts )| -> Vec<f32> {
+                Self::local_heat_transfer(&bs, &ts, 0.0)
+            })
+            .collect();
+
+        thermal_deltas.iter()
+            .zip(candidate_bodies.iter())
+            .for_each(|(ts, bs)| {
+                bs.iter()
+                    .enumerate()
+                    .for_each(
+                        |(i, b)| thermal_delta[b.id] += ts[i]
+                    )
+            });
+
         return thermal_delta;
     }
 
@@ -240,9 +253,11 @@ impl Simulation for FireSimulation {
 
             // Narrowphase
             let narrowphase_start = Instant::now();
-            for i in 0..candidates.len() {
-                narrowphase.collision_detection(bodies, &candidates[i], &collision_solver);
+
+            for c in candidates.iter() {
+                narrowphase.collision_detection(bodies, c, &collision_solver);
             }
+
             avg_narrowphase_time += narrowphase_start.elapsed().as_secs_f32();
         }
 
