@@ -1,7 +1,7 @@
 use std::{iter::zip, time::Instant};
 use cgmath::{MetricSpace, Vector3};
 use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
-use super::{broadphase::{BroadPhase, SpatialSubdivision}, collision::{CollisionBody, SimpleCollisionSolver}, constraint::{BoxConstraint, Constraint}, engine::Engine, init_utils::{create_grid_positions, generate_random_radii}, narrowphase::{Naive, NarrowPhase}, State};
+use super::{broadphase::{BroadPhase, BlockMap}, collision::{CollisionBody, SimpleCollisionSolver}, constraint::{BoxConstraint, Constraint}, engine::Engine, init_utils::{create_grid_positions, generate_random_radii}, narrowphase::{Naive, NarrowPhase}, State};
 use rayon::prelude::*;
 pub trait Simulation {
 
@@ -28,10 +28,10 @@ pub struct FireState {
 
 impl FireState {
     pub fn new() -> Self {
-        let num_rows = 20;
-        let num_cols = 20;
-        let common_radius = 0.03;
-        let initial_spacing = (common_radius * 2.0) + 0.01;
+        let num_rows = 40;
+        let num_cols = 40;
+        let common_radius = 0.01;
+        let initial_spacing = (common_radius * 2.0) + 0.005;
         let initial_spacing_var = 0.001;
         let target_num_instances: u32 = num_rows * num_cols;
 
@@ -120,7 +120,7 @@ impl FireSimulation {
     fn heat_transfer(
         bodies: &Vec<CollisionBody>, temperatures: &Vec<f32>, dt: f32) -> Vec<f32> 
     {
-        let broadphase = SpatialSubdivision::new();
+        let broadphase = BlockMap::new();
         let candidates = broadphase.collision_detection(&bodies);
         let mut thermal_delta = vec![0.0; bodies.len()];
 
@@ -140,7 +140,7 @@ impl FireSimulation {
                 Self::local_heat_transfer(&bs, &ts, 0.0)
             })
             .collect();
-
+        
         thermal_deltas.iter()
             .zip(candidate_bodies.iter())
             .for_each(|(ts, bs)| {
@@ -228,7 +228,7 @@ impl Simulation for FireSimulation {
         }
 
         let constraint = BoxConstraint::new();
-        let broadphase = SpatialSubdivision::new();
+        let broadphase = BlockMap::new();
         let narrowphase = Naive::new();
         let collision_solver = SimpleCollisionSolver::new();
 

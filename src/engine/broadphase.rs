@@ -4,9 +4,9 @@ pub trait BroadPhase {
     fn collision_detection(&self, bodies: &Vec<CollisionBody>) -> Vec<CollisionCandidates>;
 }
 
-pub struct SpatialSubdivision {}
+pub struct BlockMap {}
 
-impl SpatialSubdivision {
+impl BlockMap {
     pub fn new() -> Self {
         Self {}
     }
@@ -44,7 +44,7 @@ impl SpatialSubdivision {
 
 }
 
-impl BroadPhase for SpatialSubdivision {
+impl BroadPhase for BlockMap {
 
     fn collision_detection(&self, bodies: &Vec<CollisionBody>) -> Vec<CollisionCandidates>  {
         
