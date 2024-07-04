@@ -28,8 +28,8 @@ pub struct FireState {
 
 impl FireState {
     pub fn new() -> Self {
-        let num_rows = 40;
-        let num_cols = 40;
+        let num_rows = 60;
+        let num_cols = 60;
         let common_radius = 0.01;
         let initial_spacing = (common_radius * 2.0) + 0.005;
         let initial_spacing_var = 0.001;
@@ -277,11 +277,11 @@ impl Simulation for FireSimulation {
             //self.state.acceleration[i].y = -Self::BASE_GRAVITY + (self.state.temperatures[i].powi(2))/10.0;
         }
 
-        println!("Avg Broadphase Time: {}", avg_broadphase_time/3.0);
-        println!("Avg Narrowphase Time: {}", avg_narrowphase_time/3.0);
-        println!("Avg Constraint Time: {}", avg_constraint_time/3.0);
-        println!("Avg Heat Transfer Time: {}", avg_heat_transfer_time);
-        println!("");
+        // println!("Avg Broadphase Time: {}", avg_broadphase_time/3.0);
+        // println!("Avg Narrowphase Time: {}", avg_narrowphase_time/3.0);
+        // println!("Avg Constraint Time: {}", avg_constraint_time/3.0);
+        // println!("Avg Heat Transfer Time: {}", avg_heat_transfer_time);
+        // println!("");
     }
 
     fn log_performance(&mut self) {
