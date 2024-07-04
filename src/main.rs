@@ -4,6 +4,8 @@ mod shapes;
 mod state;
 mod engine;
 
+use std::thread;
+
 use winit::{
     dpi::PhysicalSize, event::*, event_loop::EventLoopBuilder, keyboard::{KeyCode, PhysicalKey}, window::WindowBuilder
 };
@@ -24,7 +26,7 @@ async fn run() {
     let mut state = state::State::new(&window).await;
 
     std::thread::spawn(move || loop {
-        //thread::sleep(std::time::Duration::from_millis(100));
+        // thread::sleep(std::time::Duration::from_millis(13));
         event_loop_proxy.send_event(CustomEvent::Timer).ok();
     });
 

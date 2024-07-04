@@ -1,5 +1,5 @@
 use std::{iter::zip, time::Instant};
-use cgmath::{MetricSpace, Vector3};
+use cgmath::{InnerSpace, MetricSpace, Vector3};
 use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
 use super::{broadphase::{BroadPhase, BlockMap}, collision::{CollisionBody, SimpleCollisionSolver}, constraint::{BoxConstraint, Constraint}, engine::Engine, init_utils::{create_grid_positions, generate_random_radii}, narrowphase::{Naive, NarrowPhase}, State};
 use rayon::prelude::*;
@@ -27,11 +27,9 @@ pub struct FireState {
 }
 
 impl FireState {
-    pub fn new() -> Self {
-        let num_rows = 60;
-        let num_cols = 60;
+    pub fn new(num_rows: u32, num_cols: u32, spacing: f32) -> Self {
         let common_radius = 0.01;
-        let initial_spacing = (common_radius * 2.0) + 0.005;
+        let initial_spacing = (common_radius * 2.0) + spacing;
         let initial_spacing_var = 0.001;
         let target_num_instances: u32 = num_rows * num_cols;
 
@@ -83,10 +81,18 @@ pub struct FireSimulation {
 }
 
 impl FireSimulation {
-    const CIRCLE_CONTACT_SURFACE_AREA: f32 = 0.005;
-    const BOTTOM_HEAT_SOURCE_TEMPERATURE: f32 = 1500.0;
-    const HEAT_TRANSFER_COEFFICIENT: f32 = 0.009;
-    const BASE_GRAVITY: f32 = 500.0;
+    const CIRCLE_CONTACT_SURFACE_AREA: f32 = 0.0002;
+    const BOTTOM_HEAT_SOURCE_TEMPERATURE: f32 = 3500.0;
+    const BOTTOM_HEAT_BOUNDARY: f32 = -0.985;
+    const HEAT_TRANSFER_COEFFICIENT: f32 = 0.028;
+    const BASE_GRAVITY: f32 = 1500.0;
+    
+    const VELOCITY_CAP: f32 = 0.015;
+    const NUM_COLS: u32 = 50;
+    const NUM_ROWS: u32 = 50;
+    const INITIAL_SPACING: f32 = 0.005;
+
+    const COLOR_SPECTRUM_BUCKET_SIZE: f32 = 0.3;
 
     const BLACK: Vector3<f32> = Vector3::new(31.0, 17.0, 15.0);
     const RED: Vector3<f32> = Vector3::new(231.0, 24.0, 24.0); 
@@ -165,7 +171,7 @@ impl FireSimulation {
         for i in 0..num_instances {
             
             // Bottom of the screen heats the objects
-            if bodies[i].position.y <= (-1.0 + bodies[i].radius) {
+            if bodies[i].position.y <= Self::BOTTOM_HEAT_BOUNDARY {
                 let (temp_delta_i, _) = Self::heat_conduction(temperatures[i], Self::BOTTOM_HEAT_SOURCE_TEMPERATURE, bodies[i].radius);
                 thermal_delta[i] += temp_delta_i; 
             } else {
@@ -191,10 +197,10 @@ impl Simulation for FireSimulation {
 
     fn new() -> Self {
         let engine = Engine::new();
-        let state = FireState::new();
+        let state = FireState::new(Self::NUM_ROWS, Self::NUM_COLS, Self::INITIAL_SPACING);
         let dt = 0.001;
         let color_spectrum = ColorSpectrum::new(vec![
-            Self::BLACK, Self::RED, Self::ORANGE, Self::YELLOW, Self::WHITE]);
+            Self::BLACK, Self::RED, Self::ORANGE, Self::YELLOW, Self::WHITE], Self::COLOR_SPECTRUM_BUCKET_SIZE);
 
         let mut colors = vec![color_spectrum.get(0); state.num_instances as usize];
         let color_spectrum_len = color_spectrum.len();
@@ -222,7 +228,12 @@ impl Simulation for FireSimulation {
         let bodies = &mut self.state.bodies;
         // Update positions
         for i in 0..num_instances as usize {
-            let velocity = bodies[i].position -  self.state.prev_positions[i];
+            let mut velocity = bodies[i].position - self.state.prev_positions[i];
+            let vel_magn = velocity.magnitude();
+            if vel_magn > Self::VELOCITY_CAP {
+                velocity = velocity*(Self::VELOCITY_CAP/vel_magn)
+            }
+
             self.state.prev_positions[i] = bodies[i].position;
             bodies[i].position = bodies[i].position + velocity + self.state.acceleration[i] * self.dt*self.dt;   
         }
@@ -232,41 +243,23 @@ impl Simulation for FireSimulation {
         let narrowphase = Naive::new();
         let collision_solver = SimpleCollisionSolver::new();
 
-
-        let mut avg_broadphase_time = 0.0;
-        let mut avg_narrowphase_time = 0.0;
-        let mut avg_constraint_time = 0.0;
-        let mut avg_heat_transfer_time = 0.0;
-        for _ in 0..3 {
+        for _ in 0..8 {
             // Constraint Application
-            let constraint_start = Instant::now();
             for i in 0..num_instances as usize {
                 constraint.apply_constraint(&mut bodies[i]);
             }
-            avg_constraint_time += constraint_start.elapsed().as_secs_f32();
-
             
             // Broadphase
-            let broadphase_start = Instant::now();
             let candidates = broadphase.collision_detection(&bodies);
-            avg_broadphase_time += broadphase_start.elapsed().as_secs_f32();
 
             // Narrowphase
-            let narrowphase_start = Instant::now();
-
             for c in candidates.iter() {
                 narrowphase.collision_detection(bodies, c, &collision_solver);
             }
-
-            avg_narrowphase_time += narrowphase_start.elapsed().as_secs_f32();
         }
 
         // Heat transfer
-        let heat_transfer_start = Instant::now();
         let thermal_delta = Self::heat_transfer(&bodies, &self.state.temperatures, self.dt);
-        avg_heat_transfer_time += heat_transfer_start.elapsed().as_secs_f32();
-
-
         
         let color_spectrum_len = self.color_spectrum.len();
         for (i, t) in thermal_delta.iter().enumerate() {
@@ -274,14 +267,8 @@ impl Simulation for FireSimulation {
             self.state.temperatures[i] = self.state.temperatures[i].max(0.0);
             let index = (self.state.temperatures[i] as usize).min(color_spectrum_len - 1);
             self.colors[i] = self.color_spectrum.get(index);
-            //self.state.acceleration[i].y = -Self::BASE_GRAVITY + (self.state.temperatures[i].powi(2))/10.0;
+            self.state.acceleration[i].y = -Self::BASE_GRAVITY + (self.state.temperatures[i].powi(2));
         }
-
-        // println!("Avg Broadphase Time: {}", avg_broadphase_time/3.0);
-        // println!("Avg Narrowphase Time: {}", avg_narrowphase_time/3.0);
-        // println!("Avg Constraint Time: {}", avg_constraint_time/3.0);
-        // println!("Avg Heat Transfer Time: {}", avg_heat_transfer_time);
-        // println!("");
     }
 
     fn log_performance(&mut self) {
@@ -319,9 +306,10 @@ impl Simulation for FireSimulation {
 
 struct ColorSpectrum {
     spectrum: Vec<Vector3<f32>>,
+    bucket_size: f32,
 }
 impl ColorSpectrum {
-    pub fn new(key_colors: Vec<Vector3<f32>>) -> Self {
+    pub fn new(key_colors: Vec<Vector3<f32>>, bucket_size: f32) -> Self {
         let mut spectrum = vec![];
         for i in 0..(key_colors.len() -1) {
             let color1 = key_colors[i];
@@ -330,12 +318,14 @@ impl ColorSpectrum {
             spectrum.extend(colors);
         }
         Self {
-            spectrum
+            spectrum,
+            bucket_size
         }
     }
 
     pub fn get(&self, index: usize) -> Vector3<f32> {
-        self.spectrum[index]
+        let i = (index as f32 / self.bucket_size) as usize;
+        self.spectrum[i.min(self.spectrum.len()-1)]
     }
 
     pub fn len(&self) -> usize {
