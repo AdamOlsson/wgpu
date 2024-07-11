@@ -1,13 +1,17 @@
-use core::num;
 
-use super::{instance::InstanceRaw, vertex::Vertex, Pass};
+use wgpu::TextureViewDescriptor;
+
+use super::{gray::gray::Gray, instance::InstanceRaw, vertex::Vertex, Pass};
 
 pub struct RenderPass {
     render_pipeline: wgpu::RenderPipeline,
+    pp_gray: Gray
 }
 
 impl RenderPass {
     pub fn new(device: &wgpu::Device,) -> Self {
+        //let bloom = Bloom::new(device);
+        let pp_gray = Gray::new(device);
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -61,9 +65,11 @@ impl RenderPass {
                 multiview: None,
             }
         );
-         
+
+
         RenderPass {
             render_pipeline,
+            pp_gray
         }
     }
 }
@@ -82,9 +88,7 @@ impl Pass for RenderPass {
 
     ) -> Result<(), wgpu::SurfaceError> {
         let drawable = surface.get_current_texture()?;
-        let image_view_descriptor = wgpu::TextureViewDescriptor::default();
-        let image_view = drawable.texture.create_view(&image_view_descriptor);
-
+        
         let command_encoder_descriptor = wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
         };
@@ -93,7 +97,7 @@ impl Pass for RenderPass {
             device.create_command_encoder(&command_encoder_descriptor);
 
         let color_attachment = wgpu::RenderPassColorAttachment {
-            view: &image_view,
+            view: &self.pp_gray.texture.create_view(&TextureViewDescriptor::default()),
             resolve_target: None,
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -127,6 +131,9 @@ impl Pass for RenderPass {
         }
 
         queue.submit(Some(command_encoder.finish()));
+
+        // Post Processing
+        self.pp_gray.render(&drawable.texture, device, queue).unwrap();
 
         drawable.present();
 

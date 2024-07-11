@@ -2,6 +2,8 @@ pub mod vertex;
 pub mod render_pass;
 pub mod instance;
 pub mod graphics_context;
+pub mod bloom;
+pub mod gray;
 
 use wgpu::{Device, Queue, Surface};
 pub trait Pass {
