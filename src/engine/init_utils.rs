@@ -21,6 +21,7 @@
 use cgmath::Vector3;
 use rand::Rng;
 
+#[allow(dead_code)]
 pub(crate) fn generate_random_colors(n: u32) -> Vec<Vector3<f32>> {
     let mut colors = vec![];
     let mut rng = rand::thread_rng();
@@ -33,6 +34,7 @@ pub(crate) fn generate_random_colors(n: u32) -> Vec<Vector3<f32>> {
     colors
 }
 
+#[allow(dead_code)]
 pub(crate) fn create_grid_positions(num_cols: u32, num_rows: u32, spacing: f32, variance: Option<f32>) -> Vec<Vector3<f32>> {
     let mut positions = Vec::new();
     let mut rng = rand::thread_rng();
@@ -60,6 +62,7 @@ pub(crate) fn create_grid_positions(num_cols: u32, num_rows: u32, spacing: f32, 
     positions
 }
 
+#[allow(dead_code)]
 pub(crate) fn generate_random_radii(num_instances: u32, base_radius: f32, variance: f32) -> Vec<f32> {
     if variance == 0.0 {
         return vec![base_radius; num_instances as usize];

@@ -26,6 +26,7 @@ pub(crate) fn generate_initial_positions_square_grid(num_instances: u32, radius:
     positions
 }
 
+#[allow(dead_code)]
 pub(crate) fn generate_random_colors() -> [Vector3<f32>; MAX_INSTANCES] {
     let mut colors = [Vector3::new(0.0, 0.0, 0.0); MAX_INSTANCES];
     let mut rng = rand::thread_rng();
@@ -37,6 +38,7 @@ pub(crate) fn generate_random_colors() -> [Vector3<f32>; MAX_INSTANCES] {
     colors
 }
 
+#[allow(dead_code)]
 pub(crate) fn generate_random_velocities() -> [Vector3<f32>; MAX_INSTANCES] {
     let mut velocities = [Vector3::new(0.0, 0.0, 0.0); MAX_INSTANCES];
     let mut rng = rand::thread_rng();
