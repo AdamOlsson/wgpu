@@ -5,6 +5,25 @@ use cgmath::{InnerSpace, MetricSpace, Vector3};
 use crate::engine::{init_utils::{create_grid_positions, generate_random_radii}, physics_engine::{broadphase::{blockmap::BlockMap, BroadPhase}, collision::{CollisionBody, SimpleCollisionSolver}, constraint::{box_constraint::BoxConstraint, Constraint}, narrowphase::{Naive, NarrowPhase}}, renderer_engine::vertex::Vertex, Simulation, State};
 use rayon::prelude::*;
 
+const CIRCLE_CONTACT_SURFACE_AREA: f32 = 0.0002;
+const BOTTOM_HEAT_SOURCE_TEMPERATURE: f32 = 3500.0;
+const BOTTOM_HEAT_BOUNDARY: f32 = -0.985;
+const HEAT_TRANSFER_COEFFICIENT: f32 = 0.028;
+const BASE_GRAVITY: f32 = 1500.0;
+
+const COMMON_RADIUS: f32 = 0.01;
+const VELOCITY_CAP: f32 = 0.015;
+const NUM_COLS: u32 = 50;
+const NUM_ROWS: u32 = 50;
+const INITIAL_SPACING: f32 = 0.005;
+
+const COLOR_SPECTRUM_BUCKET_SIZE: f32 = 0.3;
+
+const BLACK: Vector3<f32> = Vector3::new(31.0, 17.0, 15.0);
+const RED: Vector3<f32> = Vector3::new(231.0, 24.0, 24.0); 
+const ORANGE: Vector3<f32> = Vector3::new(231.0, 110.0, 24.0);
+const YELLOW: Vector3<f32> = Vector3::new(249.0, 197.0, 26.0);
+const WHITE: Vector3<f32> = Vector3::new(254.0, 244.0, 210.0);
 
 pub struct FireState {
     prev_positions: Vec<Vector3<f32>>,
@@ -18,12 +37,11 @@ pub struct FireState {
 
 impl FireState {
     pub fn new(num_rows: u32, num_cols: u32, spacing: f32) -> Self {
-        let common_radius = 0.01;
-        let initial_spacing = (common_radius * 2.0) + spacing;
+        let initial_spacing = (COMMON_RADIUS * 2.0) + spacing;
         let initial_spacing_var = 0.001;
         let target_num_instances: u32 = num_rows * num_cols;
 
-        let radii = generate_random_radii(target_num_instances, common_radius, 0.0);
+        let radii = generate_random_radii(target_num_instances, COMMON_RADIUS, 0.0);
 
         let prev_positions = create_grid_positions(num_rows, num_cols, initial_spacing, Some(initial_spacing_var));
         let positions = prev_positions.clone();
@@ -70,28 +88,11 @@ pub struct FireSimulation {
 }
 
 impl FireSimulation {
-    const CIRCLE_CONTACT_SURFACE_AREA: f32 = 0.0002;
-    const BOTTOM_HEAT_SOURCE_TEMPERATURE: f32 = 3500.0;
-    const BOTTOM_HEAT_BOUNDARY: f32 = -0.985;
-    const HEAT_TRANSFER_COEFFICIENT: f32 = 0.028;
-    const BASE_GRAVITY: f32 = 1500.0;
-    
-    const VELOCITY_CAP: f32 = 0.015;
-    const NUM_COLS: u32 = 50;
-    const NUM_ROWS: u32 = 50;
-    const INITIAL_SPACING: f32 = 0.005;
 
-    const COLOR_SPECTRUM_BUCKET_SIZE: f32 = 0.3;
-
-    const BLACK: Vector3<f32> = Vector3::new(31.0, 17.0, 15.0);
-    const RED: Vector3<f32> = Vector3::new(231.0, 24.0, 24.0); 
-    const ORANGE: Vector3<f32> = Vector3::new(231.0, 110.0, 24.0);
-    const YELLOW: Vector3<f32> = Vector3::new(249.0, 197.0, 26.0);
-    const WHITE: Vector3<f32> = Vector3::new(254.0, 244.0, 210.0);
     #[allow(non_snake_case)]
     fn heat_conduction(temp1: f32, temp2: f32, distance: f32) -> (f32, f32) {
         let k = 1.0; // thermal conductivity
-        let A = Self::CIRCLE_CONTACT_SURFACE_AREA;
+        let A = CIRCLE_CONTACT_SURFACE_AREA;
         let m1 = 1.0; // mass
         let m2 = 1.0; // mass
         let c1 = 1.0; // Heat capacity
@@ -108,7 +109,7 @@ impl FireSimulation {
 
     fn heat_convection(object_temp: f32, fluid_temp: f32, object_radius: f32) -> f32 {
         let surface_area = 2.0 * std::f32::consts::PI * object_radius; 
-        Self::HEAT_TRANSFER_COEFFICIENT*surface_area*(fluid_temp - object_temp)
+        HEAT_TRANSFER_COEFFICIENT*surface_area*(fluid_temp - object_temp)
     }
 
 
@@ -160,8 +161,8 @@ impl FireSimulation {
         for i in 0..num_instances {
             
             // Bottom of the screen heats the objects
-            if bodies[i].position.y <= Self::BOTTOM_HEAT_BOUNDARY {
-                let (temp_delta_i, _) = Self::heat_conduction(temperatures[i], Self::BOTTOM_HEAT_SOURCE_TEMPERATURE, bodies[i].radius);
+            if bodies[i].position.y <= BOTTOM_HEAT_BOUNDARY {
+                let (temp_delta_i, _) = Self::heat_conduction(temperatures[i], BOTTOM_HEAT_SOURCE_TEMPERATURE, bodies[i].radius);
                 thermal_delta[i] += temp_delta_i; 
             } else {
                 // Loose heat due to convection with air
@@ -185,10 +186,10 @@ impl FireSimulation {
 impl Simulation for FireSimulation {
 
     fn new() -> Self {
-        let state = FireState::new(Self::NUM_ROWS, Self::NUM_COLS, Self::INITIAL_SPACING);
+        let state = FireState::new(NUM_ROWS, NUM_COLS, INITIAL_SPACING);
         let dt = 0.001;
-        let color_spectrum = ColorSpectrum::new(vec![
-            Self::BLACK, Self::RED, Self::ORANGE, Self::YELLOW, Self::WHITE], Self::COLOR_SPECTRUM_BUCKET_SIZE);
+        let color_spectrum = ColorSpectrum::new(
+            vec![BLACK, RED, ORANGE, YELLOW, WHITE], COLOR_SPECTRUM_BUCKET_SIZE);
 
         let mut colors = vec![color_spectrum.get(0); state.num_instances as usize];
         let color_spectrum_len = color_spectrum.len();
@@ -218,8 +219,8 @@ impl Simulation for FireSimulation {
         for i in 0..num_instances as usize {
             let mut velocity = bodies[i].position - self.state.prev_positions[i];
             let vel_magn = velocity.magnitude();
-            if vel_magn > Self::VELOCITY_CAP {
-                velocity = velocity*(Self::VELOCITY_CAP/vel_magn)
+            if vel_magn > VELOCITY_CAP {
+                velocity = velocity*(VELOCITY_CAP/vel_magn)
             }
 
             self.state.prev_positions[i] = bodies[i].position;
@@ -255,7 +256,7 @@ impl Simulation for FireSimulation {
             self.state.temperatures[i] = self.state.temperatures[i].max(0.0);
             let index = (self.state.temperatures[i] as usize).min(color_spectrum_len - 1);
             self.colors[i] = self.color_spectrum.get(index);
-            self.state.acceleration[i].y = -Self::BASE_GRAVITY + (self.state.temperatures[i].powi(2));
+            self.state.acceleration[i].y = -BASE_GRAVITY + (self.state.temperatures[i].powi(2));
         }
     }
 
