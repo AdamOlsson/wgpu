@@ -1,16 +1,16 @@
 pub mod vertex;
-pub mod render_pass;
-pub mod instance;
-pub mod graphics_context;
 //pub mod bloom;
 pub mod gray;
+pub mod graphics_context;
+pub mod render_pass;
+pub mod instance;
+pub mod shapes;
 
-use wgpu::{Device, Queue, Surface, Texture};
+use wgpu::{Device, Queue, Texture};
 pub trait Pass {
     fn draw(
         &mut self,
         target_texture: &Texture,
-        //surface: &Surface,
         device: &Device,
         queue: &Queue,
         vertex_buffer: &wgpu::Buffer,

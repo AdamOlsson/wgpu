@@ -1,12 +1,8 @@
-use cgmath::{InnerSpace, Vector3};
+use cgmath::Vector3;
 
-use super::collision::CollisionBody;
+use crate::engine::physics_engine::collision::CollisionBody;
 
-
-pub trait Constraint {
-    fn new() -> Self; 
-    fn apply_constraint(&self, body: &mut CollisionBody);
-}
+use super::Constraint;
 
 pub struct BoxConstraint {}
 impl Constraint for BoxConstraint {
@@ -40,24 +36,4 @@ impl Constraint for BoxConstraint {
             pos.y -= diff*2.0;
         }
     }
-}
-
-pub struct CircleConstraint {}
-impl Constraint for CircleConstraint {
-    fn new() -> Self {
-        Self {}
-    }
-
-    fn apply_constraint(&self, body: &mut CollisionBody) {
-        let constraint_center = Vector3::new(0.0,0.0,0.0);
-        let constraint_radius = &0.95;
-    
-        let diff = body.position - constraint_center;
-        let dist = diff.magnitude();
-        if dist > (constraint_radius - body.radius) {
-            let correction_direction = diff / dist;
-            body.position = constraint_center + correction_direction*(constraint_radius - body.radius);
-        }
-    }
-    
 }

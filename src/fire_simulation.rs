@@ -1,20 +1,10 @@
+use crate::engine::renderer_engine::shapes::circle::Circle;
+
 use std::{iter::zip, time::Instant};
 use cgmath::{InnerSpace, MetricSpace, Vector3};
-use crate::{renderer_backend::vertex::Vertex, shapes::circle::Circle};
-use super::{broadphase::{BroadPhase, BlockMap}, collision::{CollisionBody, SimpleCollisionSolver}, constraint::{BoxConstraint, Constraint}, engine::Engine, init_utils::{create_grid_positions, generate_random_radii}, narrowphase::{Naive, NarrowPhase}, State};
+use crate::engine::{init_utils::{create_grid_positions, generate_random_radii}, physics_engine::{broadphase::{blockmap::BlockMap, BroadPhase}, collision::{CollisionBody, SimpleCollisionSolver}, constraint::{box_constraint::BoxConstraint, Constraint}, narrowphase::{Naive, NarrowPhase}}, renderer_engine::vertex::Vertex, Simulation, State};
 use rayon::prelude::*;
-pub trait Simulation {
 
-    fn new() -> Self;
-    fn update(&mut self);
-    fn get_bodies(&self) -> &Vec<CollisionBody>;
-    fn get_positions(&self) -> &Vec<Vector3<f32>>;
-    fn get_radii(&self) -> &Vec<f32>;
-    fn get_num_active_instances(&self) -> u32;
-    fn get_target_num_instances(&self) -> u32;
-
-    fn log_performance(&mut self);
-}
 
 pub struct FireState {
     prev_positions: Vec<Vector3<f32>>,
@@ -64,7 +54,6 @@ impl State for FireState {
 
 pub struct FireSimulation {
     // Simulation information
-    engine: Engine,
     state: FireState,
     dt: f32,
 
@@ -196,7 +185,6 @@ impl FireSimulation {
 impl Simulation for FireSimulation {
 
     fn new() -> Self {
-        let engine = Engine::new();
         let state = FireState::new(Self::NUM_ROWS, Self::NUM_COLS, Self::INITIAL_SPACING);
         let dt = 0.001;
         let color_spectrum = ColorSpectrum::new(vec![
@@ -217,7 +205,7 @@ impl Simulation for FireSimulation {
         let update_count = 0;
 
         Self {
-            engine, state, dt, color_spectrum, timer, update_count,
+            state, dt, color_spectrum, timer, update_count,
             colors, indices, vertices, num_indices
         }
     }
@@ -293,6 +281,22 @@ impl Simulation for FireSimulation {
 
     fn get_radii(&self) -> &Vec<f32> {
        todo!();
+    }
+
+    fn get_vertices(&self) -> &Vec<Vertex> {
+        &self.vertices
+    }
+
+    fn get_indices(&self) -> &Vec<u16> {
+        &self.indices
+    }
+
+    fn get_colors(&self) -> &Vec<Vector3<f32>> {
+        &self.colors
+    }
+
+    fn get_num_indices(&self) -> u32 {
+        self.num_indices
     }
 
     fn get_num_active_instances(&self) -> u32 {

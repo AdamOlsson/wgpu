@@ -1,6 +1,5 @@
 
 use wgpu::{Texture, TextureViewDescriptor};
-
 use super::{instance::InstanceRaw, vertex::Vertex, Pass};
 
 pub struct RenderPass {
@@ -19,7 +18,7 @@ impl RenderPass {
 
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Normal Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/shader.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../../shaders/shader.wgsl").into()),
         });
         let render_targets = [Some(wgpu::ColorTargetState {
             format: wgpu::TextureFormat::Bgra8UnormSrgb,

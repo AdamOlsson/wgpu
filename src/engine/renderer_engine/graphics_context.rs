@@ -1,6 +1,5 @@
 use wgpu::util::DeviceExt;
 
-
 pub struct GraphicsContext<'a> {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,

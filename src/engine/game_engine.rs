@@ -1,9 +1,12 @@
 use winit::window::Window;
+use crate::engine::Simulation;
+use crate::engine::renderer_engine::Pass;
+use crate::engine::renderer_engine::render_pass::RenderPass;
+use crate::engine::renderer_engine::instance::Instance;
+use crate::engine::renderer_engine::gray::gray::Gray;
+use crate::engine::renderer_engine::graphics_context::GraphicsContext;
 
-use crate::{engine::simulation::Simulation, renderer_backend::{graphics_context::GraphicsContext, gray::gray::Gray, instance::Instance, render_pass::RenderPass, Pass}};
-use crate::engine::simulation::FireSimulation;
-
-pub struct State<'a> {
+pub struct GameEngine<'a> {
     pub window: &'a Window,
     ctx: GraphicsContext<'a>,
     pass: RenderPass,
@@ -12,38 +15,33 @@ pub struct State<'a> {
     // Post processing
     pp_gray: Gray,
 
-    simulation: FireSimulation,
-
     instance_buffer: wgpu::Buffer,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
 }
 
-impl <'a> State <'a> {
-    pub async fn new(window: &'a Window) -> Self {
+impl <'a> GameEngine <'a> {
+    pub async fn new(window: &'a Window, simulation: &impl Simulation) -> Self {
         let size = window.inner_size();
 
         let mut ctx = GraphicsContext::new(&window).await;
 
         let pass = RenderPass::new(&ctx.device);
 
-        let simulation = FireSimulation::new();
-
         let vertex_buffer = ctx.create_buffer(
-            "Circle vertex buffer", bytemuck::cast_slice(&simulation.vertices),
+            "Circle vertex buffer", bytemuck::cast_slice(&simulation.get_vertices()),
             wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST);
 
         let index_buffer = ctx.create_buffer(
-                "Circle index buffer", bytemuck::cast_slice(&simulation.indices),
+                "Circle index buffer", bytemuck::cast_slice(&simulation.get_indices()),
                 wgpu::BufferUsages::INDEX);
         
         let bodies = simulation.get_bodies();
-        //let positions = simulation.get_positions();
-        //let radii = simulation.get_radii();
+        let colors = simulation.get_colors();
         let instances = (0..simulation.get_target_num_instances() as usize).map(
             |i| Instance {
                 position: bodies[i].position.into(),
-                color: simulation.colors[i].into(),
+                color: colors[i].into(),
                 radius: bodies[i].radius,
             }).collect::<Vec<_>>();
 
@@ -55,8 +53,7 @@ impl <'a> State <'a> {
         let pp_gray = Gray::new(&ctx.device);
 
         Self { window, ctx, pass, size, instance_buffer,
-                vertex_buffer, index_buffer, 
-                simulation, pp_gray
+                vertex_buffer, index_buffer, pp_gray
                 }
     }
 
@@ -67,16 +64,15 @@ impl <'a> State <'a> {
         self.ctx.surface.configure(&self.ctx.device, &self.ctx.config);
     }
 
-    pub fn update(&mut self) {
-        self.simulation.update();
+    pub fn update(&mut self, simulation: &mut impl Simulation) {
+        simulation.update();
 
-        //let positions = self.simulation.get_positions();
-        //let radii = self.simulation.get_radii();
-        let bodies = self.simulation.get_bodies();
-        let instances = (0..self.simulation.get_target_num_instances() as usize).map(
+        let bodies = simulation.get_bodies();
+        let colors = simulation.get_colors();
+        let instances = (0..simulation.get_target_num_instances() as usize).map(
             |i| Instance {
                 position: bodies[i].position.into(),
-                color: self.simulation.colors[i].into(),
+                color: colors[i].into(),
                 radius: bodies[i].radius,
             }.to_raw()).collect::<Vec<_>>();
 
@@ -87,13 +83,13 @@ impl <'a> State <'a> {
         
     }
 
-    pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, simulation: &impl Simulation) -> Result<(), wgpu::SurfaceError> {
 
         let target_texture = &self.pp_gray.texture;
         self.pass.draw(&target_texture, &self.ctx.device, &self.ctx.queue,
             &self.vertex_buffer, &self.index_buffer, &self.instance_buffer,
-            self.simulation.num_indices,
-            self.simulation.get_num_active_instances(),
+            simulation.get_num_indices(),
+            simulation.get_num_active_instances(),
         ).unwrap();
 
         // Post processing

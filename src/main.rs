@@ -1,11 +1,9 @@
-mod renderer_backend;
 mod texture;
-mod shapes;
-mod game_engine;
 mod engine;
+mod fire_simulation;
 
-use std::thread;
-
+use engine::{game_engine, Simulation};
+use fire_simulation::FireSimulation;
 use winit::{
     dpi::PhysicalSize, event::*, event_loop::EventLoopBuilder, keyboard::{KeyCode, PhysicalKey}, window::WindowBuilder
 };
@@ -23,7 +21,8 @@ async fn run() {
     let window = WindowBuilder::new().build(&event_loop).unwrap();
     let _ = window.request_inner_size(PhysicalSize::new(800, 800));
 
-    let mut game_engine = game_engine::State::new(&window).await;
+    let mut simulation = FireSimulation::new();
+    let mut game_engine = game_engine::GameEngine::new(&window, &simulation).await;
 
     std::thread::spawn(move || loop {
         // thread::sleep(std::time::Duration::from_millis(13));
@@ -33,8 +32,8 @@ async fn run() {
     event_loop.run(
         move | event, elwt | match event {
             Event::UserEvent(..) => {
-                game_engine.update();
-                game_engine.render().unwrap();
+                game_engine.update(&mut simulation);
+                game_engine.render(&mut simulation).unwrap();
             }
             Event::WindowEvent {
                 window_id,
@@ -58,7 +57,7 @@ async fn run() {
                 }
 
                 WindowEvent::RedrawRequested => {
-                    game_engine.render().unwrap();
+                    game_engine.render(&mut simulation).unwrap();
                 } 
 
                 WindowEvent::KeyboardInput { event: 
