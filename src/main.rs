@@ -1,7 +1,7 @@
 mod renderer_backend;
 mod texture;
 mod shapes;
-mod state;
+mod game_engine;
 mod engine;
 
 use std::thread;
@@ -23,7 +23,7 @@ async fn run() {
     let window = WindowBuilder::new().build(&event_loop).unwrap();
     let _ = window.request_inner_size(PhysicalSize::new(800, 800));
 
-    let mut state = state::State::new(&window).await;
+    let mut game_engine = game_engine::State::new(&window).await;
 
     std::thread::spawn(move || loop {
         // thread::sleep(std::time::Duration::from_millis(13));
@@ -33,14 +33,14 @@ async fn run() {
     event_loop.run(
         move | event, elwt | match event {
             Event::UserEvent(..) => {
-                state.update();
-                state.render().unwrap();
+                game_engine.update();
+                game_engine.render().unwrap();
             }
             Event::WindowEvent {
                 window_id,
                 ref event,
-            } if window_id == state.window.id() => match event {
-                WindowEvent::Resized(physical_size) => state.resize(*physical_size),
+            } if window_id == game_engine.window.id() => match event {
+                WindowEvent::Resized(physical_size) => game_engine.resize(*physical_size),
 
                 WindowEvent::CloseRequested
                 | WindowEvent::KeyboardInput {
@@ -58,7 +58,7 @@ async fn run() {
                 }
 
                 WindowEvent::RedrawRequested => {
-                    state.render().unwrap();
+                    game_engine.render().unwrap();
                 } 
 
                 WindowEvent::KeyboardInput { event: 

@@ -5,11 +5,12 @@ pub mod graphics_context;
 //pub mod bloom;
 pub mod gray;
 
-use wgpu::{Device, Queue, Surface};
+use wgpu::{Device, Queue, Surface, Texture};
 pub trait Pass {
     fn draw(
         &mut self,
-        surface: &Surface,
+        target_texture: &Texture,
+        //surface: &Surface,
         device: &Device,
         queue: &Queue,
         vertex_buffer: &wgpu::Buffer,

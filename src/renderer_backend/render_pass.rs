@@ -1,17 +1,14 @@
 
-use wgpu::TextureViewDescriptor;
+use wgpu::{Texture, TextureViewDescriptor};
 
-use super::{gray::gray::Gray, instance::InstanceRaw, vertex::Vertex, Pass};
+use super::{instance::InstanceRaw, vertex::Vertex, Pass};
 
 pub struct RenderPass {
     render_pipeline: wgpu::RenderPipeline,
-    pp_gray: Gray
 }
 
 impl RenderPass {
     pub fn new(device: &wgpu::Device,) -> Self {
-        //let bloom = Bloom::new(device);
-        let pp_gray = Gray::new(device);
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -69,7 +66,6 @@ impl RenderPass {
 
         RenderPass {
             render_pipeline,
-            pp_gray
         }
     }
 }
@@ -77,7 +73,7 @@ impl RenderPass {
 impl Pass for RenderPass {
     fn draw(
         &mut self,
-        surface: &wgpu::Surface,
+        target_texture: &Texture,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         vertex_buffer: &wgpu::Buffer,
@@ -87,7 +83,6 @@ impl Pass for RenderPass {
         num_instances: u32,
 
     ) -> Result<(), wgpu::SurfaceError> {
-        let drawable = surface.get_current_texture()?;
         
         let command_encoder_descriptor = wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
@@ -97,7 +92,7 @@ impl Pass for RenderPass {
             device.create_command_encoder(&command_encoder_descriptor);
 
         let color_attachment = wgpu::RenderPassColorAttachment {
-            view: &self.pp_gray.texture.create_view(&TextureViewDescriptor::default()),
+            view: &target_texture.create_view(&TextureViewDescriptor::default()),
             resolve_target: None,
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -131,11 +126,6 @@ impl Pass for RenderPass {
         }
 
         queue.submit(Some(command_encoder.finish()));
-
-        // Post Processing
-        self.pp_gray.render(&drawable.texture, device, queue).unwrap();
-
-        drawable.present();
 
         Ok(())
     }

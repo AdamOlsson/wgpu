@@ -1,6 +1,6 @@
 use winit::window::Window;
 
-use crate::{engine::simulation::Simulation, renderer_backend::{graphics_context::GraphicsContext, instance::Instance, render_pass::RenderPass, Pass}};
+use crate::{engine::simulation::Simulation, renderer_backend::{graphics_context::GraphicsContext, gray::gray::Gray, instance::Instance, render_pass::RenderPass, Pass}};
 use crate::engine::simulation::FireSimulation;
 
 pub struct State<'a> {
@@ -8,6 +8,9 @@ pub struct State<'a> {
     ctx: GraphicsContext<'a>,
     pass: RenderPass,
     size: winit::dpi::PhysicalSize<u32>,
+
+    // Post processing
+    pp_gray: Gray,
 
     simulation: FireSimulation,
 
@@ -49,10 +52,11 @@ impl <'a> State <'a> {
                 &instances.iter().map(Instance::to_raw).collect::<Vec<_>>()),
                 wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST);
 
+        let pp_gray = Gray::new(&ctx.device);
 
         Self { window, ctx, pass, size, instance_buffer,
                 vertex_buffer, index_buffer, 
-                simulation
+                simulation, pp_gray
                 }
     }
 
@@ -84,11 +88,20 @@ impl <'a> State <'a> {
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        self.pass.draw(&self.ctx.surface, &self.ctx.device, &self.ctx.queue,
+
+        let target_texture = &self.pp_gray.texture;
+        self.pass.draw(&target_texture, &self.ctx.device, &self.ctx.queue,
             &self.vertex_buffer, &self.index_buffer, &self.instance_buffer,
             self.simulation.num_indices,
             self.simulation.get_num_active_instances(),
         ).unwrap();
+
+        // Post processing
+        let output_frame = self.ctx.surface.get_current_texture()?;
+        self.pp_gray.render(&output_frame.texture, &self.ctx.device, &self.ctx.queue).unwrap();
+
+        output_frame.present();
+
         return Ok(());
     }
 }
