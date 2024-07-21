@@ -3,14 +3,21 @@ use cgmath::{InnerSpace, Vector3};
 
 #[derive(Clone, Copy, Debug)]
 pub struct CollisionBody {
+    pub velocity: Vector3<f32>,
+    pub prev_position: Vector3<f32>,
     pub position: Vector3<f32>,
     pub radius: f32,
     pub id: usize
 }
 
 impl CollisionBody {
-    pub fn new(id: usize, position: Vector3<f32>, radius: f32) -> Self {
+    pub fn new(
+        id: usize, velocity: Vector3<f32>, prev_position: Vector3<f32>,
+        position: Vector3<f32>, radius: f32
+    ) -> Self {
         Self {
+            velocity,
+            prev_position,
             position,
             radius,
             id

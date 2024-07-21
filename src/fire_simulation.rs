@@ -1,7 +1,7 @@
-use crate::engine::{physics_engine::{constraint, integrator::verlet::VerletIntegrator}, renderer_engine::shapes::circle::Circle};
+use crate::engine::{physics_engine::{constraint::resolver::elastic::ElasticConstraintResolver, integrator::verlet::VerletIntegrator}, renderer_engine::shapes::circle::Circle};
 
 use std::{iter::zip, time::Instant};
-use cgmath::{InnerSpace, MetricSpace, Vector3};
+use cgmath::{InnerSpace, MetricSpace, Vector3, Zero};
 use crate::engine::{init_utils::{create_grid_positions, generate_random_radii}, physics_engine::{broadphase::{blockmap::BlockMap, BroadPhase}, collision::{CollisionBody, SimpleCollisionSolver}, constraint::{box_constraint::BoxConstraint, Constraint}, narrowphase::{Naive, NarrowPhase}}, renderer_engine::vertex::Vertex, Simulation, State};
 use rayon::prelude::*;
 
@@ -44,12 +44,15 @@ impl FireState {
         let positions = prev_positions.clone();
         let acceleration = vec![Vector3::new(0.0, -150.0, 0.0); target_num_instances as usize];
 
-        let bodies: Vec<CollisionBody> = zip(positions, radii).enumerate().map(|(i, (p, r))| CollisionBody::new(i, p, r)).collect();
+        let bodies: Vec<CollisionBody> = zip(prev_positions, zip(positions, radii))
+            .enumerate()
+            .map(|(i, (pp, (p, r)))| CollisionBody::new(i, Vector3::zero(), pp, p, r))
+            .collect();
         
         let temperatures = vec![0.0; target_num_instances as usize];
         
         let integrator = VerletIntegrator::new(
-            VELOCITY_CAP, prev_positions, acceleration, bodies);
+            VELOCITY_CAP, acceleration, bodies);
         
         Self {
             integrator,
@@ -200,7 +203,7 @@ impl Simulation for FireSimulation {
         let vertices = Circle::compute_vertices([0.0,0.0,0.0], 1.0);
         let num_indices = Circle::get_num_indices();
 
-        let constraint = Box::new(BoxConstraint::new());
+        let constraint = Box::new(BoxConstraint::new(ElasticConstraintResolver::new()));
 
         let timer = Instant::now();
         let update_count = 0;

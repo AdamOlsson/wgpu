@@ -1,6 +1,6 @@
 use cgmath::{Vector3, Zero};
 
-use crate::engine::{init_utils::create_grid_positions, physics_engine::{collision::CollisionBody, constraint::{box_constraint::BoxConstraint, Constraint}, integrator::verlet::VerletIntegrator}, renderer_engine::{shapes::circle::Circle, vertex::Vertex}, Simulation};
+use crate::engine::{init_utils::create_grid_positions, physics_engine::{collision::CollisionBody, constraint::{box_constraint::BoxConstraint, resolver::elastic::ElasticConstraintResolver, Constraint}, integrator::verlet::VerletIntegrator}, renderer_engine::{shapes::circle::Circle, vertex::Vertex}, Simulation};
 
 pub struct DebugSimulation {
     dt: f32,
@@ -21,17 +21,17 @@ impl Simulation for DebugSimulation {
         let dt = 0.001;
 
         let velocity = Vector3::new(0.002, 0.002, 0.0);
-        let prev_positions = create_grid_positions(2, 1, 0.75, None); 
+        let prev_positions = create_grid_positions(2, 1, 0.75, None);
         let position = vec![prev_positions[0] + velocity, prev_positions[1] + velocity];
         let acceleration = vec![Vector3::zero(), Vector3::zero()];
         let bodies = vec![
-            CollisionBody::new(0, position[0], 0.25),
-            CollisionBody::new(0, position[1], 0.25)];
+            CollisionBody::new(0, Vector3::zero(), prev_positions[0], position[0], 0.25),
+            CollisionBody::new(1, Vector3::zero(), prev_positions[1], position[1], 0.25)];
         let num_instances = bodies.len() as u32;
         let integrator = VerletIntegrator::new(
-            f32::MAX, prev_positions, acceleration, bodies);
-
-        let constraint = Box::new(BoxConstraint::new());
+            f32::MAX, acceleration, bodies);
+        
+        let constraint = Box::new(BoxConstraint::new(ElasticConstraintResolver::new()));
 
         // Render data
         let indices = Circle::compute_indices();
