@@ -1,3 +1,5 @@
+use core::panic;
+
 use cgmath::{InnerSpace, Vector3};
 
 use crate::engine::physics_engine::collision::CollisionBody;
@@ -8,6 +10,7 @@ use super::Constraint;
 pub struct CircleConstraint {}
 impl CircleConstraint{
     fn new() -> Self {
+        panic!("Circle constraint is deprecated");
         Self {}
     }
 }
