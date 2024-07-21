@@ -1,19 +1,21 @@
-mod texture;
 mod engine;
 mod fire_simulation;
 
-use engine::{game_engine, Simulation};
 use fire_simulation::FireSimulation;
-use winit::{
-    dpi::PhysicalSize, event::*, event_loop::EventLoopBuilder, keyboard::{KeyCode, PhysicalKey}, window::WindowBuilder
-};
+
+use engine::{game_engine, Simulation};
+use winit::window::WindowBuilder;
+use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::event_loop::EventLoopBuilder;
+use winit::event::*;
+use winit::dpi::PhysicalSize;
 
 #[derive(Debug, Clone, Copy)]
 enum CustomEvent {
     Timer,
 }
 
-async fn run() {
+async fn run<T: Simulation>(simulation: &mut T) {
     let event_loop = EventLoopBuilder::<CustomEvent>::with_user_event()
         .build()
         .unwrap();
@@ -21,8 +23,7 @@ async fn run() {
     let window = WindowBuilder::new().build(&event_loop).unwrap();
     let _ = window.request_inner_size(PhysicalSize::new(800, 800));
 
-    let mut simulation = FireSimulation::new();
-    let mut game_engine = game_engine::GameEngine::new(&window, &simulation).await;
+    let mut game_engine = game_engine::GameEngine::new(&window, simulation).await;
 
     std::thread::spawn(move || loop {
         // thread::sleep(std::time::Duration::from_millis(13));
@@ -32,8 +33,8 @@ async fn run() {
     event_loop.run(
         move | event, elwt | match event {
             Event::UserEvent(..) => {
-                game_engine.update(&mut simulation);
-                game_engine.render(&mut simulation).unwrap();
+                game_engine.update(simulation);
+                game_engine.render(simulation).unwrap();
             }
             Event::WindowEvent {
                 window_id,
@@ -57,7 +58,7 @@ async fn run() {
                 }
 
                 WindowEvent::RedrawRequested => {
-                    game_engine.render(&mut simulation).unwrap();
+                    game_engine.render(simulation).unwrap();
                 } 
 
                 WindowEvent::KeyboardInput { event: 
@@ -77,5 +78,6 @@ async fn run() {
 }
 
 fn main() {
-    pollster::block_on(run());
+    let mut simulation = FireSimulation::new();
+    pollster::block_on(run(&mut simulation));
 }

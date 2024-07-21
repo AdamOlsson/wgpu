@@ -114,7 +114,7 @@ impl FireSimulation {
 
 
     fn heat_transfer(
-        bodies: &Vec<CollisionBody>, temperatures: &Vec<f32>, dt: f32) -> Vec<f32> 
+        bodies: &Vec<CollisionBody>, temperatures: &Vec<f32>) -> Vec<f32> 
     {
         let broadphase = BlockMap::new();
         let candidates = broadphase.collision_detection(&bodies);
@@ -133,7 +133,7 @@ impl FireSimulation {
             candidate_bodies.par_iter()
             .zip(candidate_temperatures.par_iter())
             .map( | (bs, ts )| -> Vec<f32> {
-                Self::local_heat_transfer(&bs, &ts, 0.0)
+                Self::local_heat_transfer(&bs, &ts)
             })
             .collect();
         
@@ -153,7 +153,7 @@ impl FireSimulation {
     /// Calculate the heat transfer due to convection between bodies
     #[allow(non_snake_case)]
     fn local_heat_transfer(
-        bodies: &Vec<CollisionBody>, temperatures: &Vec<f32>, dt: f32) -> Vec<f32> 
+        bodies: &Vec<CollisionBody>, temperatures: &Vec<f32>) -> Vec<f32> 
     {
         let num_instances = bodies.len();
         let mut thermal_delta = vec![0.0; num_instances ];
@@ -248,7 +248,7 @@ impl Simulation for FireSimulation {
         }
 
         // Heat transfer
-        let thermal_delta = Self::heat_transfer(&bodies, &self.state.temperatures, self.dt);
+        let thermal_delta = Self::heat_transfer(&bodies, &self.state.temperatures);
         
         let color_spectrum_len = self.color_spectrum.len();
         for (i, t) in thermal_delta.iter().enumerate() {
@@ -276,13 +276,13 @@ impl Simulation for FireSimulation {
         self.state.get_bodies()
     }
 
-    fn get_positions(&self) -> &Vec<Vector3<f32>> {
-        todo!();
-    }
+    // fn get_positions(&self) -> &Vec<Vector3<f32>> {
+    //     todo!();
+    // }
 
-    fn get_radii(&self) -> &Vec<f32> {
-       todo!();
-    }
+    // fn get_radii(&self) -> &Vec<f32> {
+    //    todo!();
+    // }
 
     fn get_vertices(&self) -> &Vec<Vertex> {
         &self.vertices

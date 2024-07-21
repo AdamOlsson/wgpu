@@ -40,10 +40,11 @@ impl<'a> Edge<'a> {
 }
     
 pub struct SweepAndPrune {}
+#[allow(dead_code)]
 impl SweepAndPrune {
     pub fn new() -> Self {
         panic!("SweepAndPrune does not work");
-        Self {}
+        //Self {}
     }
     fn sort_ascending(edges: &mut Vec<Edge>) {
         edges.sort_by(| a, b | a.x_value.total_cmp(&b.x_value))

@@ -1,6 +1,7 @@
 
 use crate::engine::renderer_engine::vertex::Vertex;
 
+#[allow(dead_code)]
 pub struct Triangle {
     pub center: [f32;3],
     pub base: f32,
@@ -10,6 +11,7 @@ pub struct Triangle {
     pub vertices: Vec<Vertex>,
 }
 
+#[allow(dead_code)]
 impl Triangle {
     pub fn new(center: [f32;3], base: f32, height: f32) -> Self {
         let indices = vec![0, 1, 2];

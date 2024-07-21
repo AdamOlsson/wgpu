@@ -1,6 +1,7 @@
 
 use crate::engine::renderer_engine::vertex::Vertex;
 
+#[allow(dead_code)]
 pub struct Circle {
     pub position: [f32;3],
     pub radius: f32,
@@ -11,6 +12,7 @@ pub struct Circle {
     pub velocity: [f32;3],
 }
 
+#[allow(dead_code)]
 impl Circle {
     pub fn new(position: [f32;3], radius: f32) -> Self {
 
