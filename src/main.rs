@@ -17,6 +17,12 @@ enum CustomEvent {
     Timer,
 }
 
+fn main() {
+    //let mut simulation = FireSimulation::new();
+    let mut simulation = DebugSimulation::new();
+    pollster::block_on(run(&mut simulation));
+}
+
 async fn run<T: Simulation>(simulation: &mut T) {
     let event_loop = EventLoopBuilder::<CustomEvent>::with_user_event()
         .build()
@@ -79,8 +85,3 @@ async fn run<T: Simulation>(simulation: &mut T) {
     ).expect("Error!");
 }
 
-fn main() {
-    //let mut simulation = FireSimulation::new();
-    let mut simulation = DebugSimulation::new();
-    pollster::block_on(run(&mut simulation));
-}

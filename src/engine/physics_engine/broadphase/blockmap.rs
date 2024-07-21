@@ -11,7 +11,6 @@ impl BlockMap {
     }
 
     fn assign_object_to_cell(&self, bodies: &Vec<CollisionBody>, cell_size: f32, grid_width: u32) -> Vec<Vec<usize>> {
-    
        // Assign each circle to a cell
         let mut cells: Vec<Vec<usize>> = vec![Vec::new(); (grid_width*grid_width) as usize];
         for (i, b) in bodies.iter().enumerate() {

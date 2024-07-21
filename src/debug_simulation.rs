@@ -1,12 +1,25 @@
 use cgmath::{Vector3, Zero};
-
-use crate::engine::{init_utils::create_grid_positions, physics_engine::{collision::CollisionBody, constraint::{box_constraint::BoxConstraint, resolver::elastic::ElasticConstraintResolver, Constraint}, integrator::verlet::VerletIntegrator}, renderer_engine::{shapes::circle::Circle, vertex::Vertex}, Simulation};
+use crate::engine::physics_engine::narrowphase::naive::Naive;
+use crate::engine::Simulation;
+use crate::engine::renderer_engine::vertex::Vertex;
+use crate::engine::renderer_engine::shapes::circle::Circle;
+use crate::engine::physics_engine::narrowphase::NarrowPhase;
+use crate::engine::physics_engine::integrator::verlet::VerletIntegrator;
+use crate::engine::physics_engine::constraint::Constraint;
+use crate::engine::physics_engine::constraint::resolver::elastic::ElasticConstraintResolver;
+use crate::engine::physics_engine::constraint::box_constraint::BoxConstraint;
+use crate::engine::physics_engine::collision::{CollisionBody, SimpleCollisionSolver};
+use crate::engine::physics_engine::broadphase::BroadPhase;
+use crate::engine::physics_engine::broadphase::blockmap::BlockMap;
+use crate::engine::init_utils::create_grid_positions;
 
 pub struct DebugSimulation {
     dt: f32,
     num_instances: u32,
     integrator: VerletIntegrator,
     constraint: Box<dyn Constraint>,
+    broadphase: Box<dyn BroadPhase>,
+    narrowphase: Box<dyn NarrowPhase>,
     
     // Render data
     indices: Vec<u16>,
@@ -20,9 +33,9 @@ impl Simulation for DebugSimulation {
     fn new() -> Self {
         let dt = 0.001;
 
-        let velocity = Vector3::new(0.002, 0.002, 0.0);
+        let velocities = vec![Vector3::new(0.005, 0.005, 0.0), Vector3::new(0.005, -0.003, 0.0)];
         let prev_positions = create_grid_positions(2, 1, 0.75, None);
-        let position = vec![prev_positions[0] + velocity, prev_positions[1] + velocity];
+        let position = vec![prev_positions[0] + velocities[0], prev_positions[1] + velocities[1]];
         let acceleration = vec![Vector3::zero(), Vector3::zero()];
         let bodies = vec![
             CollisionBody::new(0, Vector3::zero(), prev_positions[0], position[0], 0.25),
@@ -32,6 +45,8 @@ impl Simulation for DebugSimulation {
             f32::MAX, acceleration, bodies);
         
         let constraint = Box::new(BoxConstraint::new(ElasticConstraintResolver::new()));
+        let broadphase = Box::new(BlockMap::new());
+        let narrowphase = Box::new(Naive::new(SimpleCollisionSolver::new()));
 
         // Render data
         let indices = Circle::compute_indices();
@@ -40,7 +55,7 @@ impl Simulation for DebugSimulation {
         let colors = vec![Vector3::new(255.0, 0.0,0.0), Vector3::new(0.0,255.0,0.0)];
     
         Self { 
-            dt, integrator, constraint,
+            dt, integrator, constraint, broadphase, narrowphase,
             num_instances, indices, vertices, num_indices, colors}
     }
 
@@ -51,7 +66,11 @@ impl Simulation for DebugSimulation {
         for b in bodies.iter_mut() {
             self.constraint.apply_constraint(b);
         }
-        
+
+        let candidates = self.broadphase.collision_detection(bodies);
+        for c in candidates.iter() {
+            self.narrowphase.collision_detection(bodies, c);
+        }
     }
 
     fn get_bodies(&self) -> &Vec<crate::engine::physics_engine::collision::CollisionBody> {

@@ -1,38 +1,28 @@
 use cgmath::MetricSpace;
 
-use super::collision::{CollisionBody, CollisionCandidates, CollisionHandler};
+use crate::engine::physics_engine::collision::{CollisionBody, CollisionCandidates, CollisionHandler, SimpleCollisionSolver};
 
-pub trait NarrowPhase {
-    fn collision_detection<H>(
-        &self, 
-        bodies: &mut Vec<CollisionBody>,
-        candidates: &CollisionCandidates, 
-        handler: &H,
-    ) 
-    where
-        H: CollisionHandler;
-}
+use super::NarrowPhase;
 
 pub struct Naive {
+    solver: Box<dyn CollisionHandler + 'static>
 }
-
 impl Naive {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new<H>(solver: H) -> Self
+    where
+        H: CollisionHandler + 'static,
+    {
+        let s: Box<dyn CollisionHandler> = Box::new(solver);
+        Self { solver: s }
     }
 }
 
 impl NarrowPhase for Naive {
-
-    fn collision_detection<H>(
+    fn collision_detection(
         &self,
         bodies: &mut Vec<CollisionBody>,
         candidates: &CollisionCandidates,
-        solver: &H
-    )
-    where
-        H: CollisionHandler,
-    {
+    ) {
         let num_candidates = candidates.len();
 
         if num_candidates <= 1 {
@@ -54,7 +44,7 @@ impl NarrowPhase for Naive {
                     panic!("Collision axis has zero length.");
                 }
                 if dist < (body_i.radius + body_j.radius) {
-                    solver.handle_collision(bodies, idx_i, idx_j);
+                    self.solver.handle_collision(bodies, idx_i, idx_j);
                 }
             }
         } 

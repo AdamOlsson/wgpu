@@ -1,8 +1,16 @@
-use crate::engine::{physics_engine::{constraint::resolver::elastic::ElasticConstraintResolver, integrator::verlet::VerletIntegrator}, renderer_engine::shapes::circle::Circle};
+use crate::engine::{physics_engine::{constraint::resolver::elastic::ElasticConstraintResolver, integrator::verlet::VerletIntegrator, narrowphase::{naive::Naive, NarrowPhase}}, renderer_engine::shapes::circle::Circle};
 
 use std::{iter::zip, time::Instant};
-use cgmath::{InnerSpace, MetricSpace, Vector3, Zero};
-use crate::engine::{init_utils::{create_grid_positions, generate_random_radii}, physics_engine::{broadphase::{blockmap::BlockMap, BroadPhase}, collision::{CollisionBody, SimpleCollisionSolver}, constraint::{box_constraint::BoxConstraint, Constraint}, narrowphase::{Naive, NarrowPhase}}, renderer_engine::vertex::Vertex, Simulation, State};
+use cgmath::{MetricSpace, Vector3, Zero};
+use crate::engine::{Simulation, State};
+use crate::engine::renderer_engine::vertex::Vertex;
+use crate::engine::physics_engine::constraint::Constraint;
+use crate::engine::physics_engine::constraint::box_constraint::BoxConstraint;
+use crate::engine::physics_engine::collision::SimpleCollisionSolver;
+use crate::engine::physics_engine::collision::CollisionBody;
+use crate::engine::physics_engine::broadphase::BroadPhase;
+use crate::engine::physics_engine::broadphase::blockmap::BlockMap;
+use crate::engine::init_utils::{create_grid_positions, generate_random_radii};
 use rayon::prelude::*;
 
 const CIRCLE_CONTACT_SURFACE_AREA: f32 = 0.0002;
@@ -222,10 +230,9 @@ impl Simulation for FireSimulation {
         self.state.integrator.update(self.dt);
         let bodies = self.state.integrator.get_bodies_mut();
 
-        //let constraint = BoxConstraint::new();
         let broadphase = BlockMap::new();
-        let narrowphase = Naive::new();
         let collision_solver = SimpleCollisionSolver::new();
+        let narrowphase = Naive::new(collision_solver);
 
         for _ in 0..8 {
             // Constraint Application
@@ -238,7 +245,7 @@ impl Simulation for FireSimulation {
 
             // Narrowphase
             for c in candidates.iter() {
-                narrowphase.collision_detection(bodies, c, &collision_solver);
+                narrowphase.collision_detection(bodies, c);
             }
         }
 
