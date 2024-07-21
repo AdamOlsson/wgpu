@@ -5,11 +5,14 @@ use crate::engine::physics_engine::collision::CollisionBody;
 use super::Constraint;
 
 pub struct BoxConstraint {}
-impl Constraint for BoxConstraint {
-    fn new() -> Self {
+impl BoxConstraint {
+    pub fn new() -> Self {
         Self {}
     }
+}
 
+// TODO: Improve the constraint collision resolution
+impl Constraint for BoxConstraint {
     fn apply_constraint(&self, body: &mut CollisionBody) {
         let pos = &mut body.position;
         let radius = body.radius;

@@ -76,4 +76,8 @@ impl Circle {
         indices.push(0);
         return indices;
     }
+
+    pub fn get_num_indices() -> u32 {
+        359*3
+    }
 }

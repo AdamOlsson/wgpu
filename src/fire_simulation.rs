@@ -1,4 +1,4 @@
-use crate::engine::renderer_engine::shapes::circle::Circle;
+use crate::engine::{physics_engine::{constraint, integrator::verlet::VerletIntegrator}, renderer_engine::shapes::circle::Circle};
 
 use std::{iter::zip, time::Instant};
 use cgmath::{InnerSpace, MetricSpace, Vector3};
@@ -26,13 +26,10 @@ const YELLOW: Vector3<f32> = Vector3::new(249.0, 197.0, 26.0);
 const WHITE: Vector3<f32> = Vector3::new(254.0, 244.0, 210.0);
 
 pub struct FireState {
-    prev_positions: Vec<Vector3<f32>>,
-    acceleration: Vec<Vector3<f32>>, 
-
+    integrator: VerletIntegrator,
     num_instances: u32,
 
     temperatures: Vec<f32>,
-    bodies: Vec<CollisionBody>,
 }
 
 impl FireState {
@@ -50,11 +47,12 @@ impl FireState {
         let bodies: Vec<CollisionBody> = zip(positions, radii).enumerate().map(|(i, (p, r))| CollisionBody::new(i, p, r)).collect();
         
         let temperatures = vec![0.0; target_num_instances as usize];
-
+        
+        let integrator = VerletIntegrator::new(
+            VELOCITY_CAP, prev_positions, acceleration, bodies);
+        
         Self {
-            bodies,
-            prev_positions,
-            acceleration,
+            integrator,
             num_instances: target_num_instances,
             temperatures,
         }
@@ -63,10 +61,10 @@ impl FireState {
 
 impl State for FireState {
     fn get_bodies(&self) -> &Vec<CollisionBody> {
-        &self.bodies
+        self.integrator.get_bodies()
     }
     fn get_bodies_mut(&mut self) -> &mut Vec<CollisionBody> {
-        &mut self.bodies
+        self.integrator.get_bodies_mut()
     }
 }
 
@@ -74,7 +72,7 @@ pub struct FireSimulation {
     // Simulation information
     state: FireState,
     dt: f32,
-
+    constraint: Box<dyn Constraint>,
     // Performance information
     timer: Instant,
     update_count: u32,
@@ -200,13 +198,15 @@ impl Simulation for FireSimulation {
 
         let indices = Circle::compute_indices();
         let vertices = Circle::compute_vertices([0.0,0.0,0.0], 1.0);
-        let num_indices = (359)*3;
+        let num_indices = Circle::get_num_indices();
+
+        let constraint = Box::new(BoxConstraint::new());
 
         let timer = Instant::now();
         let update_count = 0;
 
         Self {
-            state, dt, color_spectrum, timer, update_count,
+            state, constraint, dt, color_spectrum, timer, update_count,
             colors, indices, vertices, num_indices
         }
     }
@@ -214,20 +214,12 @@ impl Simulation for FireSimulation {
     fn update(&mut self) {
         self.log_performance();
         let num_instances = self.state.num_instances;
-        let bodies = &mut self.state.bodies;
+        
         // Update positions
-        for i in 0..num_instances as usize {
-            let mut velocity = bodies[i].position - self.state.prev_positions[i];
-            let vel_magn = velocity.magnitude();
-            if vel_magn > VELOCITY_CAP {
-                velocity = velocity*(VELOCITY_CAP/vel_magn)
-            }
+        self.state.integrator.update(self.dt);
+        let bodies = self.state.integrator.get_bodies_mut();
 
-            self.state.prev_positions[i] = bodies[i].position;
-            bodies[i].position = bodies[i].position + velocity + self.state.acceleration[i] * self.dt*self.dt;   
-        }
-
-        let constraint = BoxConstraint::new();
+        //let constraint = BoxConstraint::new();
         let broadphase = BlockMap::new();
         let narrowphase = Naive::new();
         let collision_solver = SimpleCollisionSolver::new();
@@ -235,7 +227,7 @@ impl Simulation for FireSimulation {
         for _ in 0..8 {
             // Constraint Application
             for i in 0..num_instances as usize {
-                constraint.apply_constraint(&mut bodies[i]);
+                self.constraint.apply_constraint(&mut bodies[i]);
             }
             
             // Broadphase
@@ -256,7 +248,7 @@ impl Simulation for FireSimulation {
             self.state.temperatures[i] = self.state.temperatures[i].max(0.0);
             let index = (self.state.temperatures[i] as usize).min(color_spectrum_len - 1);
             self.colors[i] = self.color_spectrum.get(index);
-            self.state.acceleration[i].y = -BASE_GRAVITY + (self.state.temperatures[i].powi(2));
+            self.state.integrator.set_acceleration_y(i, -BASE_GRAVITY + (self.state.temperatures[i].powi(2)));
         }
     }
 

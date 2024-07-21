@@ -1,6 +1,8 @@
 mod engine;
 mod fire_simulation;
+mod debug_simulation;
 
+use debug_simulation::DebugSimulation;
 use fire_simulation::FireSimulation;
 
 use engine::{game_engine, Simulation};
@@ -78,6 +80,7 @@ async fn run<T: Simulation>(simulation: &mut T) {
 }
 
 fn main() {
-    let mut simulation = FireSimulation::new();
+    //let mut simulation = FireSimulation::new();
+    let mut simulation = DebugSimulation::new();
     pollster::block_on(run(&mut simulation));
 }
