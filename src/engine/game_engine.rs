@@ -27,7 +27,7 @@ impl <'a> GameEngine <'a> {
 
         let mut ctx = GraphicsContext::new(&window).await;
 
-        let pass = RenderPass::new(&ctx.device);
+        let pass = RenderPass::new(&ctx.device, &size);
 
         let vertex_buffer = ctx.create_buffer(
             "Circle vertex buffer", bytemuck::cast_slice(&simulation.get_vertices()),
@@ -54,7 +54,7 @@ impl <'a> GameEngine <'a> {
                 &instances.iter().map(Instance::to_raw).collect::<Vec<_>>()),
                 wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST);
 
-        let pp_gray = Gray::new(&ctx.device);
+        let pp_gray = Gray::new(&ctx.device, &size);
 
         Self { window, ctx, pass, size, instance_buffer,
                 vertex_buffer, index_buffer, pp_gray
@@ -75,10 +75,9 @@ impl <'a> GameEngine <'a> {
         let colors = simulation.get_colors();
         let instances = (0..simulation.get_target_num_instances() as usize).map(
             |i| Instance {
-                position: bodies[i].position.div_element_wise(
-                              Vector3::new(self.size.width as f32, self.size.height as f32, 1.0)).into(),
+                position: bodies[i].position.into(),
                 color: colors[i].into(),
-                radius: bodies[i].radius / self.size.width as f32, // FIXME: Aspect ratio
+                radius: bodies[i].radius, 
             }.to_raw()).collect::<Vec<_>>();
 
         // To prevent writing the static colors every run, we probably can use a global buffer and write 

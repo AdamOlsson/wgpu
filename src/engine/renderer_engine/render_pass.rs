@@ -1,18 +1,24 @@
 
-use wgpu::{Texture, TextureViewDescriptor};
+use wgpu::{ util::{BufferInitDescriptor, DeviceExt}, BindGroup, BindGroupLayout, BindGroupLayoutEntry, Buffer, BufferBindingType, BufferUsages, ShaderStages, Texture, TextureViewDescriptor};
 use super::{instance::InstanceRaw, vertex::Vertex, Pass};
 
 pub struct RenderPass {
+    //buffer: wgpu::Buffer,
+    buffer_bind_group: wgpu::BindGroup,
     render_pipeline: wgpu::RenderPipeline,
 }
 
 impl RenderPass {
-    pub fn new(device: &wgpu::Device,) -> Self {
+    pub fn new(device: &wgpu::Device, window_size: &winit::dpi::PhysicalSize<u32>) -> Self {
+        let size = [window_size.width as f32, window_size.height as f32];
+        let (_buffer, buffer_bind_group, buffer_bind_group_layout) = Self::create_uniform_buffer(device, &size);
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[],
+                bind_group_layouts: &[
+                    &buffer_bind_group_layout
+                ],
                 push_constant_ranges: &[],
             });
 
@@ -20,11 +26,14 @@ impl RenderPass {
             label: Some("Normal Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("../../shaders/shader.wgsl").into()),
         });
+        
         let render_targets = [Some(wgpu::ColorTargetState {
             format: wgpu::TextureFormat::Bgra8UnormSrgb,
             blend: Some(wgpu::BlendState::REPLACE),
             write_mask: wgpu::ColorWrites::ALL,
         })];
+
+
         let render_pipeline = device.create_render_pipeline(
             &wgpu::RenderPipelineDescriptor {
                 label: Some("Render Pipeline"),
@@ -62,10 +71,53 @@ impl RenderPass {
             }
         );
 
-
         RenderPass {
             render_pipeline,
+            //buffer,
+            buffer_bind_group
         }
+    }
+
+    fn create_uniform_buffer(device: &wgpu::Device, data: &[f32]) -> (Buffer, BindGroup, BindGroupLayout) {
+        let uniform_buffer = device.create_buffer_init(
+            &BufferInitDescriptor {
+                label: Some("Global render information"),
+                contents: bytemuck::cast_slice(data),
+                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST
+        });
+
+        let uniform_buffer_group_layout = device.create_bind_group_layout(
+            &wgpu::BindGroupLayoutDescriptor { 
+                label: Some("Global render buffer layout"),
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }
+                ]
+            }
+        );
+
+        let uniform_buffer_bind_group = device.create_bind_group(
+            &wgpu::BindGroupDescriptor {
+                label: Some("Global render information bind group"),
+                layout: &uniform_buffer_group_layout, 
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: uniform_buffer.as_entire_binding(),
+                    },
+                ]
+            }
+        );
+
+        (uniform_buffer, uniform_buffer_bind_group, uniform_buffer_group_layout)
     }
 }
 
@@ -114,6 +166,7 @@ impl Pass for RenderPass {
                     timestamp_writes: None,
                 });
 
+                render_pass.set_bind_group(0, &self.buffer_bind_group, &[]);
                 render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                 render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
                 

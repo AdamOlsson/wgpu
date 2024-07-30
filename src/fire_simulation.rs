@@ -197,7 +197,7 @@ impl FireSimulation {
 
 impl Simulation for FireSimulation {
 
-    fn new(window_size: winit::dpi::PhysicalSize<u32>) -> Self {
+    fn new(window_size: &winit::dpi::PhysicalSize<u32>) -> Self {
         let state = FireState::new(NUM_ROWS, NUM_COLS, INITIAL_SPACING);
         let dt = 0.001;
         let color_spectrum = ColorSpectrum::new(

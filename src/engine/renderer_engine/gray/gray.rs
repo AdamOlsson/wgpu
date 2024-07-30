@@ -10,8 +10,8 @@ pub struct Gray {
 }
 
 impl Gray {
-    pub fn new(device: &Device) -> Self {
-        let texture = Self::create_texture(device);
+    pub fn new(device: &Device, size: &winit::dpi::PhysicalSize<u32>) -> Self {
+        let texture = Self::create_texture(device, size);
         let sampler = Self::create_sampler(device);
         let (vertex_buffer, vertex_buffer_layout) = Self::create_vertex_buffer(device);
         let (bind_group, bind_group_layout) = Self::create_bind_group(device, &sampler, &texture);
@@ -64,13 +64,13 @@ impl Gray {
         Ok(())
     }
 
-    fn create_texture(device: &wgpu::Device) -> Texture { 
+    fn create_texture(device: &wgpu::Device, size: &winit::dpi::PhysicalSize<u32>) -> Texture { 
         device.create_texture(
             &TextureDescriptor {
                 label: Some("Gray Texture"),
                 size: wgpu::Extent3d {
-                    width: 800,
-                    height: 800,
+                    width: size.width,
+                    height: size.height,
                     depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,

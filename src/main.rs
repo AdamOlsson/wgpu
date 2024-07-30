@@ -19,8 +19,8 @@ enum CustomEvent {
 
 fn main() {
     let window_size = PhysicalSize::new(800, 800);
-    let mut simulation = FireSimulation::new(window_size);
-    //let mut simulation = DebugSimulation::new(window_size);
+    //let mut simulation = FireSimulation::new(&window_size);
+    let mut simulation = DebugSimulation::new(&window_size);
     pollster::block_on(run(&mut simulation, window_size));
 }
 

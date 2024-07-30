@@ -30,19 +30,22 @@ pub struct DebugSimulation {
 
 impl DebugSimulation {}
 impl Simulation for DebugSimulation {
-    fn new(window_size: winit::dpi::PhysicalSize<u32>) -> Self {
+    fn new(window_size: &winit::dpi::PhysicalSize<u32>) -> Self {
         let dt = 0.001;
         
         let velocities = vec![Vector3::new(-5., 0.5, 0.0),
-                              Vector3::new(5., 0., 0.0)];
-        let prev_positions = create_grid_positions(2, 1, 400.0, None);
+                              Vector3::new(5., 0., 0.0),
+                              Vector3::new(0.1, 5., 0.0),];
+        let prev_positions = create_grid_positions(3, 1, 400.0, None);
         let position = vec![prev_positions[0] + velocities[0],
-                            prev_positions[1] + velocities[1]];
-        let acceleration = vec![Vector3::zero(), Vector3::zero()];
-        let radius = vec![100.0, 100.0];
+                            prev_positions[1] + velocities[1],
+                            prev_positions[2] + velocities[2]];
+        let acceleration = vec![Vector3::zero(), Vector3::zero(), Vector3::zero()];
+        let radius = vec![100.0, 100.0, 120.0];
         let bodies = vec![
             CollisionBody::new(0, Vector3::zero(), prev_positions[0], position[0], radius[0]),
-            CollisionBody::new(1, Vector3::zero(), prev_positions[1], position[1], radius[1])];
+            CollisionBody::new(1, Vector3::zero(), prev_positions[1], position[1], radius[1]),
+            CollisionBody::new(2, Vector3::zero(), prev_positions[2], position[2], radius[2])];
         let num_instances = bodies.len() as u32;
         let integrator = VerletIntegrator::new(
             f32::MAX, acceleration, bodies);
@@ -57,7 +60,10 @@ impl Simulation for DebugSimulation {
         let indices = Circle::compute_indices();
         let vertices = Circle::compute_vertices([0.0,0.0,0.0,], 1.0);
         let num_indices = Circle::get_num_indices();
-        let colors = vec![Vector3::new(255.0, 0.0,0.0), Vector3::new(0.0,255.0,0.0)];
+        let colors = vec![
+            Vector3::new(255.0,0.0,0.0),
+            Vector3::new(0.0,255.0,0.0),
+            Vector3::new(0.0,0.0,255.0),];
     
         Self { 
             dt, integrator, constraint, broadphase, narrowphase,
@@ -71,7 +77,10 @@ impl Simulation for DebugSimulation {
         for b in bodies.iter_mut() {
             self.constraint.apply_constraint(b);
         }
-        
+
+        //bodies.iter().for_each(|b| println!("{}", b));
+        //println!("");
+
         let candidates = self.broadphase.collision_detection(bodies);
         for c in candidates.iter() {
             self.narrowphase.collision_detection(bodies, c);
