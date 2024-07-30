@@ -1,3 +1,4 @@
+use cgmath::{ElementWise, Vector3};
 use winit::window::Window;
 use crate::engine::Simulation;
 use crate::engine::renderer_engine::Pass;
@@ -40,9 +41,12 @@ impl <'a> GameEngine <'a> {
         let colors = simulation.get_colors();
         let instances = (0..simulation.get_target_num_instances() as usize).map(
             |i| Instance {
-                position: bodies[i].position.into(),
+                position: bodies[i].position.div_element_wise(
+                              Vector3::new(size.width as f32, size.height as f32 ,1.0)).into(),
+                //position: bodies[i].position.into(),
                 color: colors[i].into(),
-                radius: bodies[i].radius,
+                radius: bodies[i].radius / size.width as f32, // FIXME: Support for different
+                                                              // aspect ratio 
             }).collect::<Vec<_>>();
 
         let instance_buffer = ctx.create_buffer(
@@ -71,9 +75,10 @@ impl <'a> GameEngine <'a> {
         let colors = simulation.get_colors();
         let instances = (0..simulation.get_target_num_instances() as usize).map(
             |i| Instance {
-                position: bodies[i].position.into(),
+                position: bodies[i].position.div_element_wise(
+                              Vector3::new(self.size.width as f32, self.size.height as f32, 1.0)).into(),
                 color: colors[i].into(),
-                radius: bodies[i].radius,
+                radius: bodies[i].radius / self.size.width as f32, // FIXME: Aspect ratio
             }.to_raw()).collect::<Vec<_>>();
 
         // To prevent writing the static colors every run, we probably can use a global buffer and write 

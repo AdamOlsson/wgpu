@@ -6,6 +6,7 @@ pub mod game_engine;
 use cgmath::Vector3;
 use physics_engine::collision::CollisionBody;
 use renderer_engine::vertex::Vertex;
+use winit::dpi::PhysicalSize;
 
 #[allow(dead_code)]
 pub trait State {
@@ -14,7 +15,7 @@ pub trait State {
 }
 
 pub trait Simulation {
-    fn new() -> Self;
+    fn new(window_size: PhysicalSize<u32>) -> Self;
     fn update(&mut self);
     fn get_bodies(&self) -> &Vec<CollisionBody>;
     //fn get_positions(&self) -> &Vec<Vector3<f32>>;

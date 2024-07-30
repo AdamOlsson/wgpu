@@ -17,13 +17,13 @@ const CIRCLE_CONTACT_SURFACE_AREA: f32 = 0.0002;
 const BOTTOM_HEAT_SOURCE_TEMPERATURE: f32 = 3500.0;
 const BOTTOM_HEAT_BOUNDARY: f32 = -0.985;
 const HEAT_TRANSFER_COEFFICIENT: f32 = 0.028;
-const BASE_GRAVITY: f32 = 1500.0;
+const BASE_GRAVITY: f32 = 98000.0;
 
-const COMMON_RADIUS: f32 = 0.01;
-const VELOCITY_CAP: f32 = 0.015;
-const NUM_COLS: u32 = 50;
-const NUM_ROWS: u32 = 50;
-const INITIAL_SPACING: f32 = 0.005;
+const COMMON_RADIUS: f32 = 10.0;
+const VELOCITY_CAP: f32 = 400000.0;
+const NUM_COLS: u32 = 10;
+const NUM_ROWS: u32 = 10;
+const INITIAL_SPACING: f32 = 2.0;
 
 const COLOR_SPECTRUM_BUCKET_SIZE: f32 = 0.3;
 
@@ -56,7 +56,7 @@ impl FireState {
             .enumerate()
             .map(|(i, (pp, (p, r)))| CollisionBody::new(i, Vector3::zero(), pp, p, r))
             .collect();
-        
+
         let temperatures = vec![0.0; target_num_instances as usize];
         
         let integrator = VerletIntegrator::new(
@@ -84,6 +84,9 @@ pub struct FireSimulation {
     state: FireState,
     dt: f32,
     constraint: Box<dyn Constraint>,
+    broadphase: Box<dyn BroadPhase>,
+    narrowphase: Box<dyn NarrowPhase>,
+
     // Performance information
     timer: Instant,
     update_count: u32,
@@ -123,9 +126,9 @@ impl FireSimulation {
 
 
     fn heat_transfer(
-        bodies: &Vec<CollisionBody>, temperatures: &Vec<f32>) -> Vec<f32> 
+        bodies: &Vec<CollisionBody>, temperatures: &Vec<f32>,
+        broadphase: &Box<dyn BroadPhase>) -> Vec<f32> 
     {
-        let broadphase = BlockMap::new();
         let candidates = broadphase.collision_detection(&bodies);
         let mut thermal_delta = vec![0.0; bodies.len()];
 
@@ -187,14 +190,14 @@ impl FireSimulation {
                     thermal_delta[j] += temp_delta_j;
                 }
             }
-            }
+        }
         return thermal_delta;
     }
 }
 
 impl Simulation for FireSimulation {
 
-    fn new() -> Self {
+    fn new(window_size: winit::dpi::PhysicalSize<u32>) -> Self {
         let state = FireState::new(NUM_ROWS, NUM_COLS, INITIAL_SPACING);
         let dt = 0.001;
         let color_spectrum = ColorSpectrum::new(
@@ -211,13 +214,19 @@ impl Simulation for FireSimulation {
         let vertices = Circle::compute_vertices([0.0,0.0,0.0], 1.0);
         let num_indices = Circle::get_num_indices();
 
-        let constraint = Box::new(BoxConstraint::new(ElasticConstraintResolver::new()));
+        let mut constraint = Box::new(BoxConstraint::new(ElasticConstraintResolver::new()));
+        constraint.set_top_left(Vector3::new(-(window_size.width as f32), window_size.height as f32, 0.0));
+        constraint.set_bottom_right(Vector3::new(window_size.width as f32, -(window_size.height as f32), 0.0));
+
+        let broadphase = Box::new(BlockMap::new(window_size.width as f32));
+        let collision_solver = SimpleCollisionSolver::new();
+        let narrowphase = Box::new(Naive::new(collision_solver));
 
         let timer = Instant::now();
         let update_count = 0;
 
         Self {
-            state, constraint, dt, color_spectrum, timer, update_count,
+            state, constraint, broadphase, narrowphase, dt, color_spectrum, timer, update_count,
             colors, indices, vertices, num_indices
         }
     }
@@ -230,27 +239,22 @@ impl Simulation for FireSimulation {
         self.state.integrator.update(self.dt);
         let bodies = self.state.integrator.get_bodies_mut();
 
-        let broadphase = BlockMap::new();
-        let collision_solver = SimpleCollisionSolver::new();
-        let narrowphase = Naive::new(collision_solver);
-
         for _ in 0..8 {
             // Constraint Application
             for i in 0..num_instances as usize {
                 self.constraint.apply_constraint(&mut bodies[i]);
             }
-            
+    
             // Broadphase
-            let candidates = broadphase.collision_detection(&bodies);
-
+            let candidates = self.broadphase.collision_detection(&bodies);
             // Narrowphase
             for c in candidates.iter() {
-                narrowphase.collision_detection(bodies, c);
+                self.narrowphase.collision_detection(bodies, c);
             }
         }
 
         // Heat transfer
-        let thermal_delta = Self::heat_transfer(&bodies, &self.state.temperatures);
+        let thermal_delta = Self::heat_transfer(&bodies, &self.state.temperatures, &self.broadphase);
         
         let color_spectrum_len = self.color_spectrum.len();
         for (i, t) in thermal_delta.iter().enumerate() {

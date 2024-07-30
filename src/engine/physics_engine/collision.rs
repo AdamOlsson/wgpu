@@ -1,4 +1,7 @@
 
+use core::fmt;
+use std::fmt::Display;
+
 use cgmath::{InnerSpace, Vector3};
 
 #[derive(Clone, Copy, Debug)]
@@ -22,6 +25,19 @@ impl CollisionBody {
             radius,
             id
         }
+    }
+}
+
+impl Display for CollisionBody {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "id: {}, position: ({},{},{}), prev_pos: ({},{},{}), radius: {}, velocity: ({},{},{})",
+            self.id,
+            self.position.x, self.position.y, self.position.z,
+            self.prev_position.x, self.prev_position.y, self.prev_position.z,
+            self.radius,
+            self.velocity.x, self.velocity.y, self.velocity.z)
     }
 }
 

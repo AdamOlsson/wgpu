@@ -1,13 +1,17 @@
+use log::warn;
+
 use crate::engine::physics_engine::collision::{CollisionBody, CollisionCandidates};
 
 use super::BroadPhase;
 
 
-pub struct BlockMap {}
+pub struct BlockMap {
+    width: f32
+}
 
 impl BlockMap {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(width: f32) -> Self {
+        Self {width}
     }
 
     fn assign_object_to_cell(&self, bodies: &Vec<CollisionBody>, cell_size: f32, grid_width: u32) -> Vec<Vec<usize>> {
@@ -51,10 +55,13 @@ impl BroadPhase for BlockMap {
         }
         // Create grid with largest side equal to the largest diameter of the circles
         let cell_size = bodies.iter().fold(0.0, |acc, b| f32::max(acc, b.radius))*2.0;
-        let grid_width = (2.0/cell_size).ceil() as u32;
-    
+        let grid_width = (self.width/cell_size).ceil() as u32;
+        
+        if grid_width < 3 {
+            warn!("Grid width smaller than 3 is not supported.");
+        }
+
         let cells = self.assign_object_to_cell(bodies, cell_size, grid_width);
-    
         // For each cell, compute collision between all circles in the current cell and
         // all surrounding cells. Skip over the outer most cells.
         let mut all_candidates = vec![];

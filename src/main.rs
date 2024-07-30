@@ -18,18 +18,19 @@ enum CustomEvent {
 }
 
 fn main() {
-    //let mut simulation = FireSimulation::new();
-    let mut simulation = DebugSimulation::new();
-    pollster::block_on(run(&mut simulation));
+    let window_size = PhysicalSize::new(800, 800);
+    let mut simulation = FireSimulation::new(window_size);
+    //let mut simulation = DebugSimulation::new(window_size);
+    pollster::block_on(run(&mut simulation, window_size));
 }
 
-async fn run<T: Simulation>(simulation: &mut T) {
+async fn run<T: Simulation>(simulation: &mut T, window_size: PhysicalSize<u32>) {
     let event_loop = EventLoopBuilder::<CustomEvent>::with_user_event()
         .build()
         .unwrap();
     let event_loop_proxy = event_loop.create_proxy();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
-    let _ = window.request_inner_size(PhysicalSize::new(800, 800));
+    let _ = window.request_inner_size(window_size);
 
     let mut game_engine = game_engine::GameEngine::new(&window, simulation).await;
 

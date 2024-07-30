@@ -1,4 +1,4 @@
-use cgmath::{Vector3, Zero};
+use cgmath::{ElementWise, Vector3, Zero};
 use crate::engine::physics_engine::narrowphase::naive::Naive;
 use crate::engine::Simulation;
 use crate::engine::renderer_engine::vertex::Vertex;
@@ -30,16 +30,16 @@ pub struct DebugSimulation {
 
 impl DebugSimulation {}
 impl Simulation for DebugSimulation {
-    fn new() -> Self {
+    fn new(window_size: winit::dpi::PhysicalSize<u32>) -> Self {
         let dt = 0.001;
-
-        let velocities = vec![Vector3::new(0.005, 0.005, 0.0),
-                              Vector3::new(0.005, -0.003, 0.0)];
-        let prev_positions = create_grid_positions(2, 1, 0.75, None);
+        
+        let velocities = vec![Vector3::new(-5., 0.5, 0.0),
+                              Vector3::new(5., 0., 0.0)];
+        let prev_positions = create_grid_positions(2, 1, 400.0, None);
         let position = vec![prev_positions[0] + velocities[0],
                             prev_positions[1] + velocities[1]];
         let acceleration = vec![Vector3::zero(), Vector3::zero()];
-        let radius = vec![0.25, 0.25];
+        let radius = vec![100.0, 100.0];
         let bodies = vec![
             CollisionBody::new(0, Vector3::zero(), prev_positions[0], position[0], radius[0]),
             CollisionBody::new(1, Vector3::zero(), prev_positions[1], position[1], radius[1])];
@@ -48,9 +48,9 @@ impl Simulation for DebugSimulation {
             f32::MAX, acceleration, bodies);
         
         let mut constraint = Box::new(BoxConstraint::new(ElasticConstraintResolver::new()));
-        constraint.set_top_left(Vector3::new(-1.0, 1.0, 0.0));
-        constraint.set_bottom_right(Vector3::new(1.0, -1.0, 0.0));
-        let broadphase = Box::new(BlockMap::new());
+        constraint.set_top_left(Vector3::new(-(window_size.width as f32), window_size.height as f32, 0.0));
+        constraint.set_bottom_right(Vector3::new(window_size.width as f32, -(window_size.height as f32), 0.0));
+        let broadphase = Box::new(BlockMap::new(window_size.width as f32));
         let narrowphase = Box::new(Naive::new(SimpleCollisionSolver::new()));
 
         // Render data
@@ -71,7 +71,7 @@ impl Simulation for DebugSimulation {
         for b in bodies.iter_mut() {
             self.constraint.apply_constraint(b);
         }
-
+        
         let candidates = self.broadphase.collision_detection(bodies);
         for c in candidates.iter() {
             self.narrowphase.collision_detection(bodies, c);
