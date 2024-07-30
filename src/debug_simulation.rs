@@ -33,18 +33,23 @@ impl Simulation for DebugSimulation {
     fn new() -> Self {
         let dt = 0.001;
 
-        let velocities = vec![Vector3::new(0.005, 0.005, 0.0), Vector3::new(0.005, -0.003, 0.0)];
+        let velocities = vec![Vector3::new(0.005, 0.005, 0.0),
+                              Vector3::new(0.005, -0.003, 0.0)];
         let prev_positions = create_grid_positions(2, 1, 0.75, None);
-        let position = vec![prev_positions[0] + velocities[0], prev_positions[1] + velocities[1]];
+        let position = vec![prev_positions[0] + velocities[0],
+                            prev_positions[1] + velocities[1]];
         let acceleration = vec![Vector3::zero(), Vector3::zero()];
+        let radius = vec![0.25, 0.25];
         let bodies = vec![
-            CollisionBody::new(0, Vector3::zero(), prev_positions[0], position[0], 0.25),
-            CollisionBody::new(1, Vector3::zero(), prev_positions[1], position[1], 0.25)];
+            CollisionBody::new(0, Vector3::zero(), prev_positions[0], position[0], radius[0]),
+            CollisionBody::new(1, Vector3::zero(), prev_positions[1], position[1], radius[1])];
         let num_instances = bodies.len() as u32;
         let integrator = VerletIntegrator::new(
             f32::MAX, acceleration, bodies);
         
-        let constraint = Box::new(BoxConstraint::new(ElasticConstraintResolver::new()));
+        let mut constraint = Box::new(BoxConstraint::new(ElasticConstraintResolver::new()));
+        constraint.set_top_left(Vector3::new(-1.0, 1.0, 0.0));
+        constraint.set_bottom_right(Vector3::new(1.0, -1.0, 0.0));
         let broadphase = Box::new(BlockMap::new());
         let narrowphase = Box::new(Naive::new(SimpleCollisionSolver::new()));
 
