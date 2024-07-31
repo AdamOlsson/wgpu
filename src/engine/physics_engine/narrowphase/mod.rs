@@ -1,4 +1,4 @@
-use super::collision::{CollisionBody, CollisionCandidates, CollisionHandler};
+use super::collision::{CollisionBody, CollisionCandidates};
 
 
 pub mod naive;

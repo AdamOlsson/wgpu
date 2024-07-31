@@ -1,11 +1,5 @@
-mod engine;
-mod fire_simulation;
-mod debug_simulation;
 
-use debug_simulation::DebugSimulation;
-use fire_simulation::FireSimulation;
-
-use engine::{game_engine, Simulation};
+use crate::engine::{game_engine, Simulation};
 use winit::window::WindowBuilder;
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::event_loop::EventLoopBuilder;
@@ -17,14 +11,7 @@ enum CustomEvent {
     Timer,
 }
 
-fn main() {
-    let window_size = PhysicalSize::new(1000, 800);
-    //let mut simulation = FireSimulation::new(&window_size);
-    let mut simulation = DebugSimulation::new(&window_size);
-    pollster::block_on(run(&mut simulation, window_size));
-}
-
-async fn run<T: Simulation>(simulation: &mut T, window_size: PhysicalSize<u32>) {
+pub async fn run<T: Simulation>(simulation: &mut T, window_size: PhysicalSize<u32>) {
     let event_loop = EventLoopBuilder::<CustomEvent>::with_user_event()
         .build()
         .unwrap();

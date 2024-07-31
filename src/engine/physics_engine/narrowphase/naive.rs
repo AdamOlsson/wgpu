@@ -1,12 +1,11 @@
 use cgmath::MetricSpace;
-
-use crate::engine::physics_engine::collision::{CollisionBody, CollisionCandidates, CollisionHandler, SimpleCollisionSolver};
-
+use crate::engine::physics_engine::collision::{CollisionBody, CollisionCandidates, CollisionHandler};
 use super::NarrowPhase;
 
 pub struct Naive {
     solver: Box<dyn CollisionHandler + 'static>
 }
+
 impl Naive {
     pub fn new<H>(solver: H) -> Self
     where

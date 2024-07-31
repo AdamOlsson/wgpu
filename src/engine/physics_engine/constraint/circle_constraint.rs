@@ -8,6 +8,7 @@ use super::Constraint;
 
 
 pub struct CircleConstraint {}
+#[allow(unreachable_code, dead_code)]
 impl CircleConstraint{
     fn new() -> Self {
         panic!("Circle constraint is deprecated");

@@ -2,6 +2,7 @@ pub mod init_utils;
 pub mod physics_engine;
 pub mod renderer_engine;
 pub mod game_engine;
+pub mod run;
 
 use cgmath::Vector3;
 use physics_engine::collision::CollisionBody;
