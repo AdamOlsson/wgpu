@@ -1,4 +1,4 @@
-use cgmath::{ElementWise, Vector3, Zero};
+use cgmath::{ Vector3, Zero};
 use crate::engine::physics_engine::narrowphase::naive::Naive;
 use crate::engine::Simulation;
 use crate::engine::renderer_engine::vertex::Vertex;

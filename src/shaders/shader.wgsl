@@ -31,8 +31,8 @@ fn vs_main(
     let scaled_object_position = instance.position / vec3<f32>(window_size, 1.0);
 
     // Circle vertices are defined with radius 1.0 using vertices
-    let scaled_object_radius = instance.radius / window_size[0];
-    let scaled_vertex_position = vertex.position * scaled_object_radius;
+    let scaled_object_radius = vec2<f32>(instance.radius, instance.radius) / window_size;
+    let scaled_vertex_position = vertex.position * vec3<f32>(scaled_object_radius, 1.0);
 
     out.clip_position = vec4<f32>(scaled_vertex_position, 1.0) + vec4<f32>(scaled_object_position, 0.0);
     return out;
